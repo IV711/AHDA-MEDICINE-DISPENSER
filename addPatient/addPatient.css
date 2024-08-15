@@ -1,0 +1,138 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+body {
+  background: #d3cce3; /* fallback for old browsers */
+  background: -webkit-linear-gradient(
+    to right,
+    #e9e4f0,
+    #d3cce3
+  ); /* Chrome 10-25, Safari 5.1-6 */
+  background: linear-gradient(to right, #e9e4f0, #d3cce3);
+}
+
+.navbar {
+  background-color: black;
+  padding: 10px 50px;
+  height: 80px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #e9e4f0;
+}
+
+.sidebar {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+}
+button {
+  padding: 10px 20px;
+  border: unset;
+  border-radius: 15px;
+  color: #e6e6e6;
+  z-index: 1;
+  border: 1px solid #b1b1b1;
+  background: #000000;
+  position: relative;
+  font-weight: 600;
+  font-size: 17px;
+  -webkit-box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  transition: all 250ms;
+  overflow: hidden;
+}
+button::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  border-radius: 15px;
+  background-color: #d4d4d4;
+  z-index: -1;
+  -webkit-box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  transition: all 250ms;
+}
+
+button:hover {
+  color: #000000;
+}
+
+button:hover::before {
+  width: 100%;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.main h1 {
+  font-size: 2.5rem;
+  color: #000000;
+  margin: 20px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 65vh;
+  width: 40vw;
+  padding: 20px;
+  background: #e9e4f0;
+  border-radius: 15px;
+  -webkit-box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+}
+.form .input {
+  display: flex;
+  gap: 20px;
+  flex-direction: column;
+  margin-bottom: 10px;
+}
+.form label {
+  font-size: 1.3rem;
+  color: #000000;
+
+  font-weight: 500;
+}
+.form input,
+textarea {
+  padding: 10px;
+  border-radius: 15px;
+  background: transparent;
+  border: 1px solid #b1b1b1;
+}
+
+.form button {
+  padding: 10px;
+  cursor: pointer;
+  border: unset;
+  border-radius: 15px;
+  background: #000000;
+  color: #e6e6e6;
+  font-weight: 600;
+  font-size: 17px;
+  -webkit-box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+  transition: all 250ms;
+}
+
+.form button:hover {
+  color: #000000;
+}
+
+.form .btn {
+  margin: 25px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}

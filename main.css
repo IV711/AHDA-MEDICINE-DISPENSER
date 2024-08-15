@@ -1,0 +1,242 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    background: #d3cce3; /* fallback for old browsers */
+    background: -webkit-linear-gradient(
+      to right,
+      #e9e4f0,
+      #d3cce3
+    ); /* Chrome 10-25, Safari 5.1-6 */
+    background: linear-gradient(
+      to right,
+      #e9e4f0,
+      #d3cce3
+    ); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+  }
+  
+  .navbar {
+    background-color: black;
+    padding: 10px 50px;
+    height: 80px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #e9e4f0;
+  }
+  
+  .sidebar {
+    display: flex;
+    gap: 20px;
+    justify-content: space-between;
+  }
+  
+  .sidebar button {
+    padding: 10px 20px;
+    border: unset;
+    border-radius: 15px;
+    color: #e6e6e6;
+    z-index: 1;
+    border: 1px solid #b1b1b1;
+    background: #000000;
+    position: relative;
+    font-weight: 600;
+    font-size: 17px;
+    -webkit-box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+    box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+    transition: all 250ms;
+    overflow: hidden;
+  }
+  
+  .sidebar button::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    border-radius: 15px;
+    background-color: #d4d4d4;
+    z-index: -1;
+    -webkit-box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+    box-shadow: 4px 8px 19px -3px rgba(0, 0, 0, 0.27);
+    transition: all 250ms;
+  }
+  a {
+    text-decoration: none;
+    color: #e6e6e6;
+  }
+  a:hover {
+    color: #000000;
+  }
+  .sidebar button:hover {
+    color: #000000;
+  }
+  
+  .sidebar button:hover::before {
+    width: 100%;
+  }
+  
+  .main {
+    display: flex;
+  }
+  .overview {
+    width: 70%;
+    margin: 20px;
+  }
+  .overview h2 {
+    margin-bottom: 1px;
+    font-size: 30px;
+  }
+  
+  .cards {
+    display: flex;
+    margin: 40px 40px;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+    border: 1px solid black;
+    padding: 20px;
+    /* width: 190px;
+    height: 254px;
+    border-radius: 30px;
+    background: #212121;
+    box-shadow: 15px 15px 30px rgb(25, 25, 25), -15px -15px 30px rgb(60, 60, 60); */
+  }
+  
+  .card img {
+    width: 70%;
+    height: 100%;
+    border-radius: 30px;
+  }
+  /* From Uiverse.io by alexruix */
+  .card {
+    width: 230px;
+    height: 250px;
+    border-radius: 20px;
+    background: #f5f5f5;
+    position: relative;
+    padding: 1.8rem;
+    border: 2px solid #c3c6ce;
+    transition: 0.5s ease-out;
+    overflow: visible;
+  }
+  
+  .card-details {
+    /* display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    align-items: center; */
+  
+    color: black;
+    height: 100%;
+    gap: 0.5em;
+    display: grid;
+    place-content: center;
+  }
+  
+  .card-button {
+    transform: translate(-50%, 125%);
+    width: 60%;
+    border-radius: 1rem;
+    border: none;
+    background-color: #008bf8;
+    color: #fff;
+    font-size: 1rem;
+    padding: 0.5rem 1rem;
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    opacity: 0;
+    transition: 0.3s ease-out;
+  }
+  
+  .text-body {
+    color: rgb(29, 29, 29);
+  }
+  
+  /*Text*/
+  .text-title {
+    font-size: 1.5em;
+    font-weight: bold;
+  }
+  
+  /*Hover*/
+  .card:hover {
+    border-color: #008bf8;
+    box-shadow: 0 4px 18px 0 rgba(0, 0, 0, 0.25);
+  }
+  
+  .card:hover .card-button {
+    transform: translate(-50%, 50%);
+    opacity: 1;
+  }
+  .notification h2 {
+    margin-bottom: 10px;
+    font-size: 30px;
+  }
+  .ncards {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    /* margin: 20px; */
+  }
+  
+  /* From Uiverse.io by andrew-demchenk0 */
+  .info {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    width: 320px;
+    padding: 12px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: start;
+    background: #509af8;
+    border-radius: 8px;
+    box-shadow: 0px 0px 5px -3px #111;
+  }
+  .info__icon img {
+    width: 20px;
+    height: 20px;
+    transform: translateY(-2px);
+    margin-right: 8px;
+  }
+  .info__icon {
+    width: 20px;
+    height: 20px;
+    transform: translateY(-2px);
+    margin-right: 8px;
+  }
+  
+  .info__icon path {
+    fill: #fff;
+  }
+  
+  .info__title {
+    font-weight: 500;
+    font-size: 14px;
+    color: #fff;
+  }
+  
+  .info__close {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  
+  .info__close path {
+    fill: #fff;
+  }
+  
