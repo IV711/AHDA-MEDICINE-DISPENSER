@@ -1,64 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="addPatient.css" />
-    <title>Document</title>
-  </head>
-  <body>
-    <div class="container">
-      <div class="navbar sidebar">
-        <div class="sidebar">
-          <button href="#">ADHA</button>
-        </div>
-        <div class="sidebar">
-          <button href="../addPatient/addPatient.html">Add Patient</button>
-          <button href="#">Add Prescription</button>
-          <button href="#">View Patients</button>
-          <button href="#">Logout</button>
-        </div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="addPatient.css" />
+  <title>Add New Patient</title>
+</head>
+<body>
+  <div class="container">
+    <div class="navbar sidebar">
+      <div class="sidebar">
+        <button href="#">ADHA</button>
       </div>
-      <div class="main">
-        <h1>Add New Patient</h1>
-        <div class="form">
-          <form action="">
-            <div class="name input">
-              <label for="name">Patient Name:</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                placeholder="Enter Patient Name"
-              />
-            </div>
-            <div class="age input">
-              <label for="age">Patient Age:</label>
-              <input
-                type="text"
-                id="age"
-                name="age"
-                placeholder="Enter Patient Age"
-              />
-            </div>
-            <div class="photo input">
-              <label for="photo">Patient Photo:</label>
-              <input type="text" id="photo" name="photo" />
-            </div>
-            <div class="details input">
-              <label for="details">Patient Details:</label>
-              <textarea
-                name="details"
-                id="details"
-                placeholder="Enter Patient Details"
-              ></textarea>
-            </div>
-            <div class="btn">
-              <button type="submit">Add Patient</button>
-            </div>
-          </form>
-        </div>
+      <div class="sidebar">
+        <button href="../addPatient/addPatient.html">Add Patient</button>
+        <button href="#">Add Prescription</button>
+        <button href="#">View Patients</button>
+        <button href="#">Logout</button>
       </div>
     </div>
-  </body>
+    <div class="main">
+      <h1>Add New Patient</h1>
+      <div class="form">
+        <form action="" id="addpat">
+          <div class="name input">
+            <label for="name">Patient Name:</label>
+            <input type="text" id="name" name="name" placeholder="Enter Patient Name" />
+          </div>
+          <div class="age input">
+            <label for="age">Patient Age:</label>
+            <input type="text" id="age" name="age" placeholder="Enter Patient Age" />
+          </div>
+          <div class="photo input">
+            <label for="photo">Patient Photo:</label>
+            <input type="file" id="photo" name="photo" accept="image/*" />
+          </div>
+          <div class="details input">
+            <label for="details">Patient Details:</label>
+            <textarea name="details" id="details" placeholder="Enter Patient Details"></textarea>
+          </div>
+          <div class="btn">
+            <button type="submit">Add Patient</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Use module script type for JavaScript files with import statements -->
+  <script type="module" src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js"></script>
+  <script type="module" src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js"></script>
+  <script type="module" src="addpatient.js"></script>
+</body>
 </html>
