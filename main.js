@@ -1,14 +1,19 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-import { getDatabase, onValue, ref } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+import {
+  getDatabase,
+  onValue,
+  ref,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD0bcDszuRnDIhP0xKn5OJsepG_bM4w56Q",
   authDomain: "addpatients.firebaseapp.com",
-  databaseURL: "https://addpatients-default-rtdb.asia-southeast1.firebasedatabase.app",
+  databaseURL:
+    "https://addpatients-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "addpatients",
   storageBucket: "addpatients.appspot.com",
   messagingSenderId: "594219036450",
-  appId: "1:594219036450:web:2345ca5c169602c3a5bf7b"
+  appId: "1:594219036450:web:2345ca5c169602c3a5bf7b",
 };
 
 const app = initializeApp(firebaseConfig);
@@ -28,24 +33,28 @@ function createCard(patient) {
   `;
 }
 
-const dbRef = ref(database, 'ADDPATIENT FORM');
-onValue(dbRef, (snapshot) => {
-  const cardsContainer = document.querySelector('.cards');
-  cardsContainer.innerHTML = '';  // Clear existing cards
+const dbRef = ref(database, "ADDPATIENT FORM");
+onValue(
+  dbRef,
+  (snapshot) => {
+    const cardsContainer = document.querySelector(".cards");
+    cardsContainer.innerHTML = ""; // Clear existing cards
 
-  if (snapshot.exists()) {
-    snapshot.forEach((childSnapshot) => {
-      const patient = childSnapshot.val();
-      if (patient.name && patient.age && patient.photo) {  // Ensure data integrity
-        const cardHTML = createCard(patient);
-        cardsContainer.innerHTML += cardHTML;
-      }
-    });
-  } else {
-    console.log("No data available");
-    cardsContainer.innerHTML = '<p>No patients found.</p>';
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        const patient = childSnapshot.val();
+        if (patient.name && patient.age && patient.photo) {
+          // Ensure data integrity
+          const cardHTML = createCard(patient);
+          cardsContainer.innerHTML += cardHTML;
+        }
+      });
+    } else {
+      console.log("No data available");
+      cardsContainer.innerHTML = "<p>No patients found.</p>";
+    }
+  },
+  (error) => {
+    console.error("Error fetching data: ", error);
   }
-}, (error) => {
-  console.error("Error fetching data: ", error);
-});
-
+);
