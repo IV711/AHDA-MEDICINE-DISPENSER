@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="main.css" />
+    <title>Patient Overview</title>
+  </head>
+  <body>
+    <div class="container">
+      <div class="navbar">
+        <div class="logo sidebar">
+          <button>
+            <a href="../main.html">ADHA</a>
+          </button>
+        </div>
+        <div class="sidebar">
+          <button>
+            <a href="../addPatient/addPatient.html"> Add Patient</a>
+          </button>
+          <button>
+            <a href="../add prescription/add_prescription.html">
+              Add Prescription
+            </a>
+          </button>
+
+          <button><a href="../container/container.html">Container</a></button>
+          <button href="#">Logout</button>
+        </div>
+      </div>
+      <div class="main">
+        <div class="overview">
+          <h2 style="text-align: center">Patient Overview</h2>
+          <div class="cards">
+            <!-- Dynamic Cards Will Be Rendered Here -->
+          </div>
+        </div>
+        <div class="notification">
+          <h2>Notification</h2>
+          <div class="ncards">
+            <!-- Dynamic Notification Cards Will Be Rendered Here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Include your main.js file -->
+    <script type="module" src="main.js"></script>
+  </body>
+</html>

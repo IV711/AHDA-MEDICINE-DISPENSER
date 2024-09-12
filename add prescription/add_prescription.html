@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="add_prescription.css" />
+    <title>Add Prescription</title>
+  </head>
+  <body>
+    <div class="container">
+      <div class="navbar">
+        <div class="logo sidebar">
+          <button>
+            <a href="../main.html">ADHA</a>
+          </button>
+        </div>
+        <div class="sidebar">
+          <button>
+            <a href="../addPatient/addPatient.html"> Add Patient</a>
+          </button>
+          <button>
+            <a href="../add prescription/add_prescription.html">
+              Add Prescription
+            </a>
+          </button>
+          <button><a href="../container/container.html">Container</a></button>
+          <button href="#">Logout</button>
+        </div>
+      </div>
+
+      <div class="content">
+        <h1>Add Prescription</h1>
+        <div class="select-patient">
+          <label for="patients">Select Patient:</label>
+          <select name="patients" id="patients">
+            <option value="patient1">Patient 1</option>
+            <option value="patient2">Patient 2</option>
+            <option value="patient3">Patient 3</option>
+          </select>
+        </div>
+
+        <div class="prescription-section">
+          <!-- Manual Prescription Form -->
+          <div class="manual-prescription">
+            <div class="tablet-card">
+              <form id="prescription-form">
+                <div class="form-group">
+                  <label for="tablet-name">Tablet Name:</label>
+                  <input
+                    type="text"
+                    id="tablet-name"
+                    placeholder="Enter Tablet Name"
+                    required
+                  />
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="morning-time">Morning:</label>
+                    <input type="time" id="morning-time" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="afternoon-time">Afternoon:</label>
+                    <input type="time" id="afternoon-time" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="evening-time">Evening:</label>
+                    <input type="time" id="evening-time" />
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="days">Days:</label>
+                    <input
+                      type="number"
+                      id="days"
+                      min="1"
+                      placeholder="Days"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="dosage">Dosage:</label>
+                    <input
+                      type="text"
+                      id="dosage"
+                      placeholder="Dosage"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <button type="submit" class="add-tablet-btn">Add Tablet</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Display Added Tablets Section -->
+      <div id="tablet-list" class="tablet-list">
+        <h3>Added Tablets</h3>
+      </div>
+
+      <!-- External JavaScript File -->
+      <script type="module" src="add_prescription.js"></script>
+    </div>
+  </body>
+</html>
