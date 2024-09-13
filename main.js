@@ -114,9 +114,9 @@ function attachDeleteEventListeners() {
 }
 
 /*************** New Functionality: Fetching Prescriptions from 'add-prescription' *****************/
-function createNotificationCard(patientName, time) {
+function createNotificationCard(patientName, time, notificationKey) {
   return `
-    <div class="info">
+    <div class="info" id="${notificationKey}">
       <div class="info__icon">
         <img src="main/info.png" alt="Info Icon" />
       </div>
@@ -124,8 +124,25 @@ function createNotificationCard(patientName, time) {
         <h3>Upcoming Medication</h3>
         <p>${patientName}: ${time}</p>
       </div>
+      <span class="skip-icon" data-notification-key="${notificationKey}">&times;</span> <!-- Skip Icon -->
     </div>
   `;
+}
+
+// Helper function to check if a given time has passed
+function hasTimePassed(time) {
+  const [hour, minute, period] = time.match(/(\d+):(\d+) (\w+)/).slice(1);
+  const date = new Date();
+  let hours = parseInt(hour);
+
+  // Convert 12-hour format to 24-hour format for comparison
+  if (period === "PM" && hours < 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  const timeToCompare = new Date();
+  timeToCompare.setHours(hours, minute, 0);
+
+  return timeToCompare < date;
 }
 
 // Fetch prescription details from the 'add_prescription' Firebase app
@@ -137,16 +154,10 @@ onValue(
     const notificationsContainer = document.querySelector(".ncards");
     notificationsContainer.innerHTML = ""; // Clear existing notifications
 
-    // Log the snapshot for debugging
-    console.log("Fetched prescription data:", snapshot.val());
-
     if (snapshot.exists()) {
       snapshot.forEach((patientSnapshot) => {
         const patientName = patientSnapshot.key; // Patient's name
         const patientData = patientSnapshot.val();
-
-        console.log(`Processing data for patient: ${patientName}`);
-        console.log(`Patient data:`, patientData);
 
         const tablets = patientData.tablets;
 
@@ -155,36 +166,42 @@ onValue(
           Object.keys(tablets).forEach((tabletKey) => {
             const tablet = tablets[tabletKey];
 
-            // Log tablet details
-            console.log(`Tablet data for ${patientName}:`, tablet);
-
-            // Only consider valid times for notifications (morning, afternoon, or evening)
-            let nextTime = null;
-
-            if (tablet.morningTime && tablet.morningTime !== "") {
-              nextTime = tablet.morningTime;
-            } else if (tablet.afternoonTime && tablet.afternoonTime !== "") {
-              nextTime = tablet.afternoonTime;
-            } else if (tablet.eveningTime && tablet.eveningTime !== "") {
-              nextTime = tablet.eveningTime;
-            }
-
-            // If a valid time is found, create and append the notification card
-            if (nextTime) {
-              console.log(
-                `Creating notification for ${patientName} at ${nextTime}`
-              );
+            // Process all available times (morning, afternoon, evening)
+            if (tablet.morningTime && !hasTimePassed(tablet.morningTime)) {
+              const notificationKey = `${patientName}-${tabletKey}-morning`;
               const notificationHTML = createNotificationCard(
                 patientName,
-                nextTime
+                tablet.morningTime,
+                notificationKey
+              );
+              notificationsContainer.innerHTML += notificationHTML;
+            }
+
+            if (tablet.afternoonTime && !hasTimePassed(tablet.afternoonTime)) {
+              const notificationKey = `${patientName}-${tabletKey}-afternoon`;
+              const notificationHTML = createNotificationCard(
+                patientName,
+                tablet.afternoonTime,
+                notificationKey
+              );
+              notificationsContainer.innerHTML += notificationHTML;
+            }
+
+            if (tablet.eveningTime && !hasTimePassed(tablet.eveningTime)) {
+              const notificationKey = `${patientName}-${tabletKey}-evening`;
+              const notificationHTML = createNotificationCard(
+                patientName,
+                tablet.eveningTime,
+                notificationKey
               );
               notificationsContainer.innerHTML += notificationHTML;
             }
           });
-        } else {
-          console.log(`No prescriptions found for ${patientName}`);
         }
       });
+
+      // Attach skip functionality to each skip icon
+      attachSkipEventListeners();
     } else {
       console.log("No prescription data available");
       notificationsContainer.innerHTML = "<p>No notifications found.</p>";
@@ -194,3 +211,25 @@ onValue(
     console.error("Error fetching prescription data:", error);
   }
 );
+
+/*************** Skip Notification Logic *****************/
+function attachSkipEventListeners() {
+  const skipIcons = document.querySelectorAll(".skip-icon");
+
+  skipIcons.forEach((icon) => {
+    icon.addEventListener("click", (event) => {
+      const notificationKey = event.target.getAttribute(
+        "data-notification-key"
+      );
+
+      // Confirm the skip action
+      if (confirm("Are you sure you want to skip this notification?")) {
+        // Remove the notification card from the DOM
+        const notificationCard = document.getElementById(notificationKey);
+        if (notificationCard) {
+          notificationCard.remove();
+        }
+      }
+    });
+  });
+}

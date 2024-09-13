@@ -83,19 +83,28 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  // Helper function to convert 24-hour time to 12-hour format with AM/PM
-  function convertTo12HourFormat(time) {
+  // Helper function to convert 24-hour time to 12-hour format with AM/PM based on context (morning, afternoon, evening)
+  function convertTo12HourFormat(time, context) {
     const [hours, minutes] = time.split(":");
     let period = "AM";
     let hour = parseInt(hours);
 
-    if (hour >= 12) {
+    // Determine the appropriate period (AM/PM) based on the context
+    if (context === "morning") {
+      period = "AM";
+      if (hour >= 12) {
+        hour -= 12; // Ensure morning time is displayed correctly
+      }
+    } else if (context === "afternoon" || context === "evening") {
       period = "PM";
       if (hour > 12) {
         hour -= 12;
       }
-    } else if (hour === 0) {
-      hour = 12; // Midnight case
+      if (hour === 12 && context === "afternoon") {
+        period = "PM"; // Afternoon should remain PM
+      } else if (hour < 12 && context === "evening") {
+        hour += 12; // Make sure evening is not interpreted as AM
+      }
     }
 
     return `${hour}:${minutes} ${period}`;
@@ -139,15 +148,15 @@ document.addEventListener("DOMContentLoaded", function () {
       const dosage = document.getElementById("dosage").value;
       const currentDate = new Date().toISOString().split("T")[0]; // Store current date as 'YYYY-MM-DD'
 
-      // Convert times to 12-hour format with AM/PM
+      // Convert times to 12-hour format with AM/PM based on the time context
       if (morningTime) {
-        morningTime = convertTo12HourFormat(morningTime);
+        morningTime = convertTo12HourFormat(morningTime, "morning");
       }
       if (afternoonTime) {
-        afternoonTime = convertTo12HourFormat(afternoonTime);
+        afternoonTime = convertTo12HourFormat(afternoonTime, "afternoon");
       }
       if (eveningTime) {
-        eveningTime = convertTo12HourFormat(eveningTime);
+        eveningTime = convertTo12HourFormat(eveningTime, "evening");
       }
 
       // Save the prescription data to 'add_prescription' Firebase
@@ -159,9 +168,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
       set(newPrescriptionRef, {
         tabletName: tabletName,
-        morningTime: morningTime,
-        afternoonTime: afternoonTime,
-        eveningTime: eveningTime,
+        morningTime: morningTime || null, // Only save if morningTime is provided
+        afternoonTime: afternoonTime || null, // Only save if afternoonTime is provided
+        eveningTime: eveningTime || null, // Only save if eveningTime is provided
         days: days, // Store initial total days
         dosage: dosage,
         startDate: currentDate, // Store the current date when the prescription is added
@@ -214,9 +223,15 @@ document.addEventListener("DOMContentLoaded", function () {
           tabletCard.innerHTML = `
                 <div class="tablet-row">
                   <span class="tablet-name">Tablet: ${tablet.tabletName}</span>
-                  <span class="tablet-time">Morning: ${tablet.morningTime}</span>
-                  <span class="tablet-time">Afternoon: ${tablet.afternoonTime}</span>
-                  <span class="tablet-time">Evening: ${tablet.eveningTime}</span>
+                  <span class="tablet-time">Morning: ${
+                    tablet.morningTime || "-"
+                  }</span>
+                  <span class="tablet-time">Afternoon: ${
+                    tablet.afternoonTime || "-"
+                  }</span>
+                  <span class="tablet-time">Evening: ${
+                    tablet.eveningTime || "-"
+                  }</span>
                   <span class="tablet-days">Days Remaining: ${remainingDays}</span>
                   <span class="tablet-dosage">Dosage: ${tablet.dosage}</span>
                 </div>
