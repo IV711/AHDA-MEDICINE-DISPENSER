@@ -145,3 +145,12 @@ a {
   text-decoration: none;
   color: #e6e6e6;
 }
+/* Remove underline from anchor tags inside buttons */
+.sidebar a {
+  text-decoration: none;
+  color: inherit; /* Ensure it uses the inherited color */
+}
+
+.sidebar a:hover, .sidebar a:focus, .sidebar a:active {
+  text-decoration: none; /* No underline in hover, focus, or active states */
+}
