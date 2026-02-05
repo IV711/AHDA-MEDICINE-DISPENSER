@@ -46,11 +46,11 @@ function loadContainerData() {
   for (let i = 1; i <= 8; i++) {
     const containerNumber = i;
     const inputField = document.querySelector(
-      `.tablet-item:nth-child(${containerNumber}) input`
+      .tablet-item:nth-child(${containerNumber}) input
     );
 
     // Get data for each container
-    get(child(dbRef, `containers/${containerNumber}`))
+    get(child(dbRef, containers/${containerNumber}))
       .then((snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
@@ -85,3 +85,4 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 });
+
