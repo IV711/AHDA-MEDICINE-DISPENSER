@@ -10,7 +10,146 @@ import {
   set,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
+const prescriptionForm = document.getElementById("prescription-form");
+const tabletList = document.getElementById("tablet-list");
+const commandPreview = document.getElementById("command-preview");
+const exportScheduleButton = document.getElementById("export-schedule");
+const sendToBridgeButton = document.getElementById("send-to-bridge");
+const clearScheduleButton = document.getElementById("clear-schedule");
+const bridgeStatus = document.getElementById("bridge-status");
+
+const scheduleEntries = [];
+
+function createDispenseCommandLine(slot, time, tabletName) {
+  const normalizedSlot = slot.toUpperCase();
+  return `AT ${time} -> DISPENSE:${normalizedSlot}  // ${tabletName}`;
+}
+
+function buildPayload() {
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    entries: scheduleEntries,
+  };
+}
+
+function renderCommandPreview() {
+  if (!scheduleEntries.length) {
+    commandPreview.textContent =
+      "No schedule yet. Add a tablet to generate Arduino commands.";
+    return;
+  }
+
+  const lines = scheduleEntries.flatMap((entry, index) => {
+    return [
+      `# Tablet ${index + 1}: ${entry.tabletName} | dosage: ${entry.dosage} | ${entry.days} days`,
+      createDispenseCommandLine("morning", entry.morningTime, entry.tabletName),
+      createDispenseCommandLine(
+        "afternoon",
+        entry.afternoonTime,
+        entry.tabletName,
+      ),
+      createDispenseCommandLine("night", entry.nightTime, entry.tabletName),
+      "",
+    ];
+  });
+
+  commandPreview.textContent = lines.join("\n").trim();
+}
+
+prescriptionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const tabletName = document.getElementById("tablet-name").value;
+  const morningTime = document.getElementById("morning-time").value;
+  const afternoonTime = document.getElementById("afternoon-time").value;
+  const nightTime = document.getElementById("night-time").value;
+  const days = document.getElementById("days").value;
+  const dosage = document.getElementById("dosage").value;
+
+  const tabletCard = document.createElement("div");
+  tabletCard.classList.add("tablet-entry");
+  tabletCard.innerHTML = `
+    <div class="tablet-row">
+      <span class="tablet-name">${tabletName}</span>
+      <span class="tablet-time">${morningTime}</span>
+      <span class="tablet-time">${afternoonTime}</span>
+      <span class="tablet-time">${nightTime}</span>
+      <span class="tablet-days">${days} days</span>
+    </div>
+  `;
+
+  tabletList.appendChild(tabletCard);
+
+  scheduleEntries.push({
+    tabletName,
+    dosage,
+    morningTime,
+    afternoonTime,
+    nightTime,
+    days: Number(days),
+  });
+
+  renderCommandPreview();
+  prescriptionForm.reset();
+});
+
+exportScheduleButton.addEventListener("click", () => {
+  if (!scheduleEntries.length) {
+    commandPreview.textContent = "Cannot export: no schedule entries found.";
+    return;
+  }
+
+  const payload = buildPayload();
+  commandPreview.textContent = `${commandPreview.textContent}\n\nJSON payload for hardware_bridge.js:\n${JSON.stringify(
+    payload,
+    null,
+    2,
+  )}`;
+});
+
+sendToBridgeButton.addEventListener("click", async () => {
+  if (!scheduleEntries.length) {
+    bridgeStatus.textContent = "Bridge status: add at least one tablet first.";
+    return;
+  }
+
+  const payload = buildPayload();
+
+  try {
+    const response = await fetch("http://127.0.0.1:8787/schedule", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      bridgeStatus.textContent = `Bridge status: failed (${response.status})`;
+      return;
+    }
+
+    const result = await response.json();
+    bridgeStatus.textContent = `Bridge status: loaded ${result.loadedEvents} events at ${result.receivedAt}`;
+  } catch (error) {
+    bridgeStatus.textContent =
+      "Bridge status: cannot reach bridge. Start hardware_bridge.js in --server mode.";
+  }
+});
+
+clearScheduleButton.addEventListener("click", () => {
+  scheduleEntries.length = 0;
+  document.querySelectorAll(".tablet-entry").forEach((entry) => entry.remove());
+  renderCommandPreview();
+  bridgeStatus.textContent = "Bridge status: schedule cleared in UI.";
+});
+
+renderCommandPreview();
+
 // Firebase configuration for 'addpatients' app (for retrieving patients)
+
 const firebasePatientsConfig = {
   apiKey: "AIzaSyD0bcDszuRnDIhP0xKn5OJsepG_bM4w56Q",
   authDomain: "addpatients.firebaseapp.com",
@@ -39,7 +178,7 @@ if (!getApps().find((app) => app.name === "addpatients")) {
   initializeApp(firebasePatientsConfig, "addpatients");
 }
 const databasePatients = getDatabase(
-  getApps().find((app) => app.name === "addpatients")
+  getApps().find((app) => app.name === "addpatients"),
 );
 
 // Initialize 'add_prescription' app for storing prescriptions
@@ -47,7 +186,7 @@ if (!getApps().find((app) => app.name === "add_prescription")) {
   initializeApp(firebasePrescriptionConfig, "add_prescription");
 }
 const databasePrescription = getDatabase(
-  getApps().find((app) => app.name === "add_prescription")
+  getApps().find((app) => app.name === "add_prescription"),
 );
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -162,7 +301,7 @@ document.addEventListener("DOMContentLoaded", function () {
       // Save the prescription data to 'add_prescription' Firebase
       const prescriptionRef = ref(
         databasePrescription,
-        `add_prescription/${patientName}/tablets`
+        `add_prescription/${patientName}/tablets`,
       );
       const newPrescriptionRef = push(prescriptionRef);
 
@@ -201,7 +340,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const tabletsRef = ref(
       databasePrescription,
-      `add_prescription/${patientName}/tablets`
+      `add_prescription/${patientName}/tablets`,
     );
 
     onValue(tabletsRef, (snapshot) => {
@@ -214,7 +353,7 @@ document.addEventListener("DOMContentLoaded", function () {
           // Calculate the correct days remaining
           const remainingDays = calculateDaysRemaining(
             tablet.startDate,
-            parseInt(tablet.days)
+            parseInt(tablet.days),
           );
 
           // Create a new card for each tablet

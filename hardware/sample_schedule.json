@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "generatedAt": "2026-02-05T13:00:00.000Z",
+  "timezone": "Asia/Kolkata",
+  "entries": [
+    {
+      "tabletName": "Paracetamol",
+      "dosage": "1 tablet",
+      "morningTime": "10:25",
+      "afternoonTime": "13:00",
+      "nightTime": "21:00",
+      "days": 5
+    }
+  ]
+}

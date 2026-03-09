@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -66,8 +66,8 @@
                   </div>
 
                   <div class="form-group">
-                    <label for="evening-time">Evening:</label>
-                    <input type="time" id="evening-time" />
+                    <label for="night-time">Night:</label>
+                    <input type="time" id="night-time" required />
                   </div>
                 </div>
 
@@ -106,6 +106,29 @@
         <h3>Added Tablets</h3>
       </div>
 
+      <div class="hardware-plan" id="hardware-plan">
+        <h3>Hardware Command Preview</h3>
+        <p>Use these commands while building the Arduino integration.</p>
+        <pre id="command-preview"></pre>
+        <div class="hardware-actions">
+          <button type="button" id="export-schedule" class="add-tablet-btn">
+            Export Schedule JSON
+          </button>
+          <button type="button" id="send-to-bridge" class="add-tablet-btn">
+            Send to Hardware Bridge
+          </button>
+          <button
+            type="button"
+            id="clear-schedule"
+            class="add-tablet-btn secondary-btn"
+          >
+            Clear Schedule
+          </button>
+        </div>
+        <p id="bridge-status" class="bridge-status">
+          Bridge status: not connected
+        </p>
+      </div>
       <!-- External JavaScript File -->
       <script type="module" src="add_prescription.js"></script>
     </div>
