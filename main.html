@@ -25,7 +25,7 @@
           </button>
 
           <!-- <button><a href="../container/container.html">Container</a></button> -->
-          <button href="#">Logout</button>
+          <button type="button" id="logout-button">Logout</button>
         </div>
       </div>
 
@@ -79,6 +79,45 @@
           <div class="live-feed" id="live-feed"></div>
         </div>
       </div>
+
+      <section class="smart-bot panel" aria-labelledby="smart-bot-title">
+        <div class="bot-header">
+          <div>
+            <p class="eyebrow">AI care assistant</p>
+            <h2 id="smart-bot-title">Dispense Smart Bot</h2>
+            <p>
+              Ask about due doses, dispensed medicine, missed schedules, patient
+              prescription counts, or bridge status using the current dashboard
+              data.
+            </p>
+          </div>
+          <div class="bot-orb" aria-hidden="true">✦</div>
+        </div>
+        <div class="bot-suggestions" aria-label="Suggested bot questions">
+          <button type="button" data-bot-question="What is due now?">
+            Due now
+          </button>
+          <button type="button" data-bot-question="What was dispensed today?">
+            Dispensed today
+          </button>
+          <button type="button" data-bot-question="Show patient summary">
+            Patient summary
+          </button>
+          <button type="button" data-bot-question="Is the bridge connected?">
+            Bridge status
+          </button>
+        </div>
+        <div class="bot-messages" id="bot-messages" aria-live="polite"></div>
+        <form id="bot-form" class="bot-form">
+          <input
+            type="text"
+            id="bot-input"
+            placeholder="Ask: Which medicines are due now?"
+            autocomplete="off"
+          />
+          <button type="submit">Ask</button>
+        </form>
+      </section>
     </div>
 
     <!-- Include your main.js file -->
