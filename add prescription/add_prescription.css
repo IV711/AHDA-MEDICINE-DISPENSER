@@ -409,6 +409,8 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   width: 100%;
 }
 
@@ -423,4 +425,98 @@ input[type="time"]:hover::-webkit-calendar-picker-indicator {
   flex: 1;
   text-align: center;
   color: #4d4d4d;
+}
+
+.notification-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.missed-dose-alert {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: #ffffff;
+  border-left: 6px solid #7d5fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  animation: slide-in 0.3s ease;
+}
+
+.missed-dose-alert.warning {
+  border-left-color: #d97706;
+}
+
+.missed-dose-alert.error {
+  border-left-color: #dc2626;
+}
+
+.missed-dose-alert strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #333333;
+}
+
+.missed-dose-alert p {
+  margin: 0;
+  color: #4d4d4d;
+  line-height: 1.4;
+}
+
+.missed-dose-alert button {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: #4d4d4d;
+  cursor: pointer;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.tablet-patient,
+.tablet-dosage {
+  flex: 1;
+  text-align: center;
+  color: #4d4d4d;
+}
+
+.dispense-btn {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  background-color: #16a34a;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-weight: 700;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+}
+
+.dispense-btn:hover {
+  background-color: #15803d;
+  transform: translateY(-2px);
+}
+
+.empty-tablets {
+  color: #4d4d4d;
+  text-align: center;
+}
+
+@keyframes slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
