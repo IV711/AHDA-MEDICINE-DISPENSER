@@ -64,6 +64,8 @@ const missedDoseNotifications = document.getElementById(
 const scheduleEntries = [];
 const missedPrescriptionKeys = new Set();
 const MISSED_DOSE_GRACE_PERIOD_MINUTES = 10;
+const MISSED_DOSE_CHECK_INTERVAL_MS = 15000;
+let latestPrescriptionSnapshot = null;
 
 function convertTo12HourFormat(time) {
   if (!time) {
@@ -231,35 +233,35 @@ function buildPayload() {
   };
 }
 
+function formatDoseTime(label, time) {
+  return time ? `${label}: ${time}` : `${label}: not scheduled`;
+}
+
 function renderCommandPreview() {
   if (!scheduleEntries.length) {
     commandPreview.textContent =
-      "No schedule yet. Add a tablet to generate Arduino commands.";
+      "No schedule yet. Add a tablet to prepare a hardware bridge review.";
     return;
   }
 
-  const lines = scheduleEntries.flatMap((entry, index) => {
-    return [
-      `# Tablet ${index + 1}: ${entry.tabletName} | dosage: ${entry.dosage} | ${entry.days} days`,
-      createDispenseCommandLine(
-        "morning",
-        entry.morningTime || "--:--",
-        entry.tabletName,
-      ),
-      createDispenseCommandLine(
-        "afternoon",
-        entry.afternoonTime || "--:--",
-        entry.tabletName,
-      ),
-      createDispenseCommandLine(
-        "night",
-        entry.nightTime || "--:--",
-        entry.tabletName,
-      ),
+  const lines = [
+    "Review this schedule before sending it to the hardware bridge:",
+    "",
+  ];
+
+  scheduleEntries.forEach((entry, index) => {
+    lines.push(
+      `${index + 1}. ${entry.patientName} needs ${entry.tabletName}`,
+      `   Dosage: ${entry.dosage}`,
+      `   Duration: ${entry.days} day(s)`,
+      `   ${formatDoseTime("Morning", entry.morningTime)}`,
+      `   ${formatDoseTime("Afternoon", entry.afternoonTime)}`,
+      `   ${formatDoseTime("Night", entry.nightTime)}`,
       "",
-    ];
+    );
   });
 
+  lines.push('Click "Send to Hardware Bridge" when this review looks correct.');
   commandPreview.textContent = lines.join("\n").trim();
 }
 
@@ -328,32 +330,41 @@ function loadTabletsForPatient(patientName) {
   });
 }
 
+function scanMissedPrescriptions(snapshot) {
+  if (!snapshot?.exists()) {
+    return;
+  }
+
+  snapshot.forEach((patientSnapshot) => {
+    const patientName = patientSnapshot.key;
+    const tablets = patientSnapshot.val()?.tablets;
+
+    if (!tablets) {
+      return;
+    }
+
+    Object.keys(tablets).forEach((tabletKey) => {
+      const tablet = tablets[tabletKey];
+      const missedDose = getMissedDose(tablet);
+
+      if (missedDose) {
+        removeMissedPrescription(patientName, tabletKey, tablet, missedDose);
+      }
+    });
+  });
+}
+
 function monitorMissedPrescriptions() {
   const prescriptionsRef = ref(databasePrescription, "add_prescription");
 
   onValue(prescriptionsRef, (snapshot) => {
-    if (!snapshot.exists()) {
-      return;
-    }
-
-    snapshot.forEach((patientSnapshot) => {
-      const patientName = patientSnapshot.key;
-      const tablets = patientSnapshot.val()?.tablets;
-
-      if (!tablets) {
-        return;
-      }
-
-      Object.keys(tablets).forEach((tabletKey) => {
-        const tablet = tablets[tabletKey];
-        const missedDose = getMissedDose(tablet);
-
-        if (missedDose) {
-          removeMissedPrescription(patientName, tabletKey, tablet, missedDose);
-        }
-      });
-    });
+    latestPrescriptionSnapshot = snapshot;
+    scanMissedPrescriptions(snapshot);
   });
+
+  setInterval(() => {
+    scanMissedPrescriptions(latestPrescriptionSnapshot);
+  }, MISSED_DOSE_CHECK_INTERVAL_MS);
 }
 
 function loadPatients() {
@@ -407,22 +418,25 @@ prescriptionForm.addEventListener("submit", (event) => {
   const afternoonTime = convertTo12HourFormat(afternoonTimeRaw);
   const eveningTime = convertTo12HourFormat(nightTimeRaw);
 
-  scheduleEntries.push({
-    tabletName,
-    dosage,
-    morningTime: morningTimeRaw,
-    afternoonTime: afternoonTimeRaw,
-    nightTime: nightTimeRaw,
-    days: Number(days),
-  });
-
-  renderCommandPreview();
   const prescriptionRef = ref(
     databasePrescription,
     `add_prescription/${patientName}/tablets`,
   );
 
   const newPrescriptionRef = push(prescriptionRef);
+  const scheduleEntry = {
+    patientName,
+    tabletKey: newPrescriptionRef.key,
+    tabletName,
+    dosage,
+    morningTime: morningTimeRaw,
+    afternoonTime: afternoonTimeRaw,
+    nightTime: nightTimeRaw,
+    days: Number(days),
+  };
+
+  scheduleEntries.push(scheduleEntry);
+  renderCommandPreview();
 
   set(newPrescriptionRef, {
     tabletName,
@@ -450,16 +464,13 @@ patientsDropdown.addEventListener("change", () => {
 
 exportScheduleButton.addEventListener("click", () => {
   if (!scheduleEntries.length) {
-    commandPreview.textContent = "Cannot export: no schedule entries found.";
+    commandPreview.textContent = "Cannot review: no schedule entries found.";
     return;
   }
 
-  const payload = buildPayload();
-  commandPreview.textContent = `${commandPreview.textContent}\n\nJSON payload for hardware_bridge.js:\n${JSON.stringify(
-    payload,
-    null,
-    2,
-  )}`;
+  renderCommandPreview();
+  bridgeStatus.textContent =
+    "Bridge status: schedule review is ready. Send it when approved.";
 });
 
 sendToBridgeButton.addEventListener("click", async () => {
@@ -485,7 +496,7 @@ sendToBridgeButton.addEventListener("click", async () => {
     }
 
     const result = await response.json();
-    bridgeStatus.textContent = `Bridge status: loaded ${result.loadedEvents} events at ${result.receivedAt}`;
+    bridgeStatus.textContent = `Bridge status: sent ${result.loadedEvents} scheduled dose(s) to the hardware bridge at ${result.receivedAt}.`;
   } catch (error) {
     bridgeStatus.textContent =
       "Bridge status: cannot reach bridge. Start hardware_bridge.js in --server mode.";
