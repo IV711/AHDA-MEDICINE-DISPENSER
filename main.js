@@ -1,5 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
+  getAuth,
+  signOut,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
   getDatabase,
   onValue,
   ref,
@@ -31,13 +35,24 @@ const prescriptionAppConfig = {
   appId: "1:356227587000:web:d17384304f2d3ea0f3cd4d",
 };
 
+const loginAppConfig = {
+  apiKey: "AIzaSyBnLD8SkcnEPyx9blSBeQwfH5J75hLhJ4Q",
+  authDomain: "ahda-login-page.firebaseapp.com",
+  projectId: "ahda-login-page",
+  storageBucket: "ahda-login-page.appspot.com",
+  messagingSenderId: "658853633192",
+  appId: "1:658853633192:web:37195e593f0914f799769d",
+};
+
 // Initialize Firebase apps for both projects
 const patientApp = initializeApp(patientAppConfig, "patientsApp"); // 'patientsApp' will handle patient data
 const prescriptionApp = initializeApp(prescriptionAppConfig, "prescriptionApp"); // 'prescriptionApp' will handle prescriptions
+const loginApp = initializeApp(loginAppConfig, "loginApp"); // 'loginApp' handles logout
 
 // Get database references for both Firebase apps
 const patientDatabase = getDatabase(patientApp); // Patient database
 const prescriptionDatabase = getDatabase(prescriptionApp); // Prescription database
+const auth = getAuth(loginApp);
 
 const stats = {
   patients: 0,
@@ -49,6 +64,15 @@ const stats = {
 const seenEventIds = new Set();
 const dispensedNotificationKeys = new Set();
 let bridgeEventStream = null;
+let currentPatients = [];
+let currentPrescriptionSummaries = [];
+let latestBridgeEvents = [];
+let currentBridgeStatus = "Bridge: checking connection...";
+
+const logoutButton = document.getElementById("logout-button");
+const botForm = document.getElementById("bot-form");
+const botInput = document.getElementById("bot-input");
+const botMessages = document.getElementById("bot-messages");
 
 function updateStatsUI() {
   document.getElementById("stat-patients").textContent = String(stats.patients);
@@ -57,6 +81,99 @@ function updateStatsUI() {
   document.getElementById("stat-dispensed").textContent = String(
     stats.dispensedToday,
   );
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getPatientPrescriptionSummary(patientName) {
+  const doses = currentPrescriptionSummaries.filter(
+    (item) => item.patientName === patientName,
+  );
+
+  return {
+    total: doses.length,
+    due: doses.filter((item) => item.status.className === "due").length,
+    upcoming: doses.filter((item) => item.status.className === "upcoming")
+      .length,
+    dispensed: doses.filter((item) => item.status.className === "dispensed")
+      .length,
+  };
+}
+
+function createPatientCard(patient, patientKey) {
+  const summary = getPatientPrescriptionSummary(patient.name);
+  const initials = String(patient.name || "?")
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const statusLabel = summary.due
+    ? `${summary.due} due now`
+    : summary.upcoming
+      ? `${summary.upcoming} upcoming`
+      : "All clear";
+  const statusClass = summary.due
+    ? "patient-status due"
+    : summary.upcoming
+      ? "patient-status upcoming"
+      : "patient-status clear";
+
+  return `
+    <div class="card patient-card" id="${escapeHTML(patientKey)}">
+      <div class="patient-card-glow"></div>
+      <div class="patient-photo-wrap">
+        <img src="${escapeHTML(patient.photo)}" alt="${escapeHTML(patient.name)} photo" />
+        <span class="patient-initials">${escapeHTML(initials)}</span>
+      </div>
+      <div class="card-details">
+        <div>
+          <p class="text-title">${escapeHTML(patient.name)}</p>
+          <p class="text-body">${escapeHTML(patient.age)} years old</p>
+          <p class="text-body patient-details">${escapeHTML(patient.details || "No extra details")}</p>
+        </div>
+        <div class="patient-metrics">
+          <span><strong>${summary.total}</strong> doses</span>
+          <span><strong>${summary.dispensed}</strong> done</span>
+        </div>
+        <span class="${statusClass}">${escapeHTML(statusLabel)}</span>
+      </div>
+      <button class="card-button" data-patient-key="${escapeHTML(patientKey)}">Delete Patient</button>
+    </div>
+  `;
+}
+
+function renderPatientCards() {
+  const cardsContainer = document.querySelector(".cards");
+  cardsContainer.innerHTML = "";
+
+  if (!currentPatients.length) {
+    cardsContainer.innerHTML = '<p class="empty-state">No patients found.</p>';
+    return;
+  }
+
+  cardsContainer.innerHTML = currentPatients
+    .map(({ patient, patientKey }) => createPatientCard(patient, patientKey))
+    .join("");
+  attachDeleteEventListeners();
+}
+
+function handleLogout() {
+  signOut(auth)
+    .then(() => {
+      window.location.href = "index.html";
+    })
+    .catch((error) => {
+      console.error("Logout failed:", error);
+      alert("Logout failed. Please try again.");
+    });
 }
 
 function parse12HourTimeToDate(time) {
@@ -218,6 +335,9 @@ function showBrowserNotification(title, body) {
 }
 
 function renderLiveEvent(event) {
+  latestBridgeEvents.unshift(event);
+  latestBridgeEvents = latestBridgeEvents.slice(0, 20);
+
   const liveFeed = document.getElementById("live-feed");
   if (!liveFeed) return;
 
@@ -345,7 +465,8 @@ async function pollBridgeEvents() {
     const healthResponse = await fetch("http://127.0.0.1:8787/health");
     if (!healthResponse.ok) throw new Error("Bridge unavailable");
 
-    bridgeBanner.textContent = "Bridge: connected (real-time updates active)";
+    currentBridgeStatus = "Bridge: connected (real-time updates active)";
+    bridgeBanner.textContent = currentBridgeStatus;
     bridgeBanner.classList.add("online");
 
     const recentResponse = await fetch("http://127.0.0.1:8787/events/recent");
@@ -354,10 +475,178 @@ async function pollBridgeEvents() {
       ingestBridgeEvents(recent.events);
     }
   } catch (error) {
-    bridgeBanner.textContent =
+    currentBridgeStatus =
       "Bridge: offline. Start hardware_bridge.js --server for live dispense notifications.";
+    bridgeBanner.textContent = currentBridgeStatus;
     bridgeBanner.classList.remove("online");
   }
+}
+
+function connectBridgeEventStream() {
+  if (!("EventSource" in window) || bridgeEventStream) {
+    return;
+  }
+
+  const bridgeBanner = document.getElementById("bridge-banner");
+  bridgeEventStream = new EventSource("http://127.0.0.1:8787/events");
+
+  bridgeEventStream.onopen = () => {
+    currentBridgeStatus = "Bridge: connected (live event stream active)";
+    bridgeBanner.textContent = currentBridgeStatus;
+    bridgeBanner.classList.add("online");
+  };
+
+  bridgeEventStream.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    ingestBridgeEvents([event]);
+  };
+
+  bridgeEventStream.onerror = () => {
+    currentBridgeStatus =
+      "Bridge: reconnecting live event stream. Polling remains active.";
+    bridgeBanner.textContent = currentBridgeStatus;
+    bridgeBanner.classList.remove("online");
+  };
+}
+
+function formatDoseList(items, emptyMessage) {
+  if (!items.length) {
+    return emptyMessage;
+  }
+
+  return items
+    .slice(0, 6)
+    .map(
+      (item) =>
+        `${item.patientName}: ${item.tabletName} (${item.slotName} at ${item.time}) - ${item.status.label}`,
+    )
+    .join("\n");
+}
+
+function createBotSummary() {
+  const due = currentPrescriptionSummaries.filter(
+    (item) => item.status.className === "due",
+  );
+  const overdue = currentPrescriptionSummaries.filter(
+    (item) => item.status.className === "overdue",
+  );
+  const upcoming = currentPrescriptionSummaries.filter(
+    (item) => item.status.className === "upcoming",
+  );
+  const dispensed = currentPrescriptionSummaries.filter(
+    (item) => item.status.className === "dispensed",
+  );
+
+  return { due, overdue, upcoming, dispensed };
+}
+
+function answerBotQuestion(question) {
+  const normalizedQuestion = question.toLowerCase();
+  const { due, overdue, upcoming, dispensed } = createBotSummary();
+
+  if (
+    normalizedQuestion.includes("bridge") ||
+    normalizedQuestion.includes("hardware")
+  ) {
+    const lastEvent = latestBridgeEvents[0];
+    return `Current bridge status: ${currentBridgeStatus}${lastEvent ? `\nLatest bridge event: ${lastEvent.message}` : ""}`;
+  }
+
+  if (
+    normalizedQuestion.includes("due") ||
+    normalizedQuestion.includes("now")
+  ) {
+    return formatDoseList(
+      due,
+      "No medicines are due right now based on the current prescription data.",
+    );
+  }
+
+  if (
+    normalizedQuestion.includes("overdue") ||
+    normalizedQuestion.includes("miss")
+  ) {
+    return formatDoseList(
+      overdue,
+      "No overdue or missed medicines are currently visible on the dashboard.",
+    );
+  }
+
+  if (
+    normalizedQuestion.includes("dispensed") ||
+    normalizedQuestion.includes("done")
+  ) {
+    return formatDoseList(
+      dispensed,
+      "No dispensed medicines are recorded in the current prescription data yet.",
+    );
+  }
+
+  if (
+    normalizedQuestion.includes("upcoming") ||
+    normalizedQuestion.includes("next")
+  ) {
+    return formatDoseList(
+      upcoming,
+      "No upcoming doses are currently scheduled.",
+    );
+  }
+
+  if (
+    normalizedQuestion.includes("patient") ||
+    normalizedQuestion.includes("summary")
+  ) {
+    if (!currentPatients.length) {
+      return "No patient records are loaded yet.";
+    }
+
+    return currentPatients
+      .map(({ patient }) => {
+        const summary = getPatientPrescriptionSummary(patient.name);
+        return `${patient.name}: ${summary.total} scheduled dose(s), ${summary.due} due now, ${summary.upcoming} upcoming, ${summary.dispensed} dispensed.`;
+      })
+      .join("\n");
+  }
+
+  return `Dashboard summary:\nPatients: ${stats.patients}\nDue now: ${stats.dueNow}\nUpcoming: ${stats.upcoming}\nDispensed today: ${stats.dispensedToday}\nTry asking: "What is due now?", "What was dispensed today?", or "Show patient summary."`;
+}
+
+function addBotMessage(message, sender = "bot") {
+  if (!botMessages) return;
+
+  const bubble = document.createElement("div");
+  bubble.className = `bot-message ${sender}`;
+  bubble.textContent = message;
+  botMessages.appendChild(bubble);
+  botMessages.scrollTop = botMessages.scrollHeight;
+}
+
+function askSmartBot(question) {
+  const trimmedQuestion = question.trim();
+  if (!trimmedQuestion) return;
+
+  addBotMessage(trimmedQuestion, "user");
+  addBotMessage(answerBotQuestion(trimmedQuestion), "bot");
+}
+
+function initializeSmartBot() {
+  if (!botForm || !botInput || !botMessages) return;
+
+  addBotMessage(
+    "Hi! I can answer questions from the current dispense dashboard data.",
+  );
+
+  botForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    askSmartBot(botInput.value);
+    botInput.value = "";
+  });
+
+  document.querySelectorAll("[data-bot-question]").forEach((button) => {
+    button.addEventListener("click", () => {
+      askSmartBot(button.dataset.botQuestion || "");
+    });
+  });
 }
 
 function connectBridgeEventStream() {
@@ -388,8 +677,7 @@ function connectBridgeEventStream() {
 /*************** Skip Notification Logic *****************/
 const dbRef = ref(patientDatabase, "ADDPATIENT FORM");
 onValue(dbRef, (snapshot) => {
-  const cardsContainer = document.querySelector(".cards");
-  cardsContainer.innerHTML = "";
+  currentPatients = [];
   stats.patients = 0;
 
   if (snapshot.exists()) {
@@ -399,25 +687,12 @@ onValue(dbRef, (snapshot) => {
 
       if (patient.name && patient.age && patient.photo) {
         stats.patients += 1;
-        const cardHTML = `
-          <div class="card" id="${patientKey}">
-            <div class="card-details">
-              <img src="${patient.photo}" alt="Patient Photo" />
-              <p class="text-title">${patient.name}</p>
-              <p class="text-body">Age: ${patient.age}</p>
-              <p class="text-body">Details: ${patient.details || "-"}</p>
-            </div>
-            <button class="card-button" data-patient-key="${patientKey}">Delete Patient</button>
-          </div>
-        `;
-        cardsContainer.innerHTML += cardHTML;
+        currentPatients.push({ patient, patientKey });
       }
     });
-    attachDeleteEventListeners();
-  } else {
-    cardsContainer.innerHTML = "<p>No patients found.</p>";
   }
 
+  renderPatientCards();
   updateStatsUI();
 });
 
@@ -427,6 +702,7 @@ onValue(prescriptionDbRef, (snapshot) => {
   notificationsContainer.innerHTML = "";
   stats.upcoming = 0;
   stats.dueNow = 0;
+  currentPrescriptionSummaries = [];
 
   if (snapshot.exists()) {
     snapshot.forEach((patientSnapshot) => {
@@ -454,6 +730,15 @@ onValue(prescriptionDbRef, (snapshot) => {
           if (status.className === "upcoming") stats.upcoming += 1;
           if (status.className === "due") stats.dueNow += 1;
 
+          currentPrescriptionSummaries.push({
+            patientName,
+            tabletName: tablet.tabletName || tabletKey,
+            tabletKey,
+            slotName: slot.name,
+            time: slot.time,
+            status,
+          });
+
           notificationsContainer.innerHTML += createNotificationCard(
             patientName,
             tablet.tabletName || tabletKey,
@@ -472,6 +757,7 @@ onValue(prescriptionDbRef, (snapshot) => {
     notificationsContainer.innerHTML = "<p>No notifications found.</p>";
   }
 
+  renderPatientCards();
   updateStatsUI();
 });
 
@@ -482,6 +768,11 @@ setInterval(() => {
   }
 }, 1000);
 
+if (logoutButton) {
+  logoutButton.addEventListener("click", handleLogout);
+}
+
+initializeSmartBot();
 pollBridgeEvents();
 connectBridgeEventStream();
 setInterval(pollBridgeEvents, 5000);
