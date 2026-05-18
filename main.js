@@ -649,6 +649,31 @@ function initializeSmartBot() {
   });
 }
 
+function connectBridgeEventStream() {
+  if (!("EventSource" in window) || bridgeEventStream) {
+    return;
+  }
+
+  const bridgeBanner = document.getElementById("bridge-banner");
+  bridgeEventStream = new EventSource("http://127.0.0.1:8787/events");
+
+  bridgeEventStream.onopen = () => {
+    bridgeBanner.textContent = "Bridge: connected (live event stream active)";
+    bridgeBanner.classList.add("online");
+  };
+
+  bridgeEventStream.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    ingestBridgeEvents([event]);
+  };
+
+  bridgeEventStream.onerror = () => {
+    bridgeBanner.textContent =
+      "Bridge: reconnecting live event stream. Polling remains active.";
+    bridgeBanner.classList.remove("online");
+  };
+}
+
 /*************** Skip Notification Logic *****************/
 const dbRef = ref(patientDatabase, "ADDPATIENT FORM");
 onValue(dbRef, (snapshot) => {
