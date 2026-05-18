@@ -7,6 +7,7 @@ import {
   onValue,
   push,
   ref,
+  remove,
   set,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
@@ -56,8 +57,13 @@ const sendToBridgeButton = document.getElementById("send-to-bridge");
 const clearScheduleButton = document.getElementById("clear-schedule");
 const bridgeStatus = document.getElementById("bridge-status");
 const patientsDropdown = document.getElementById("patients");
+const missedDoseNotifications = document.getElementById(
+  "missed-dose-notifications",
+);
 
 const scheduleEntries = [];
+const missedPrescriptionKeys = new Set();
+const MISSED_DOSE_GRACE_PERIOD_MINUTES = 10;
 
 function convertTo12HourFormat(time) {
   if (!time) {
@@ -84,6 +90,131 @@ function calculateDaysRemaining(startDate, totalDays) {
   const daysPassed = Math.floor(timeDifference / (1000 * 60 * 60 * 24));
   const remainingDays = Number(totalDays) - daysPassed;
   return remainingDays > 0 ? remainingDays : 0;
+}
+
+function parse12HourTimeToDate(timeLabel) {
+  if (!timeLabel) {
+    return null;
+  }
+
+  const match = String(timeLabel)
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const now = new Date();
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3].toUpperCase();
+
+  if (period === "PM" && hours < 12) {
+    hours += 12;
+  }
+
+  if (period === "AM" && hours === 12) {
+    hours = 0;
+  }
+
+  const target = new Date(now);
+  target.setHours(hours, minutes, 0, 0);
+  return target;
+}
+
+function isTabletDispensed(tablet) {
+  const status = String(tablet.status || tablet.dispenseStatus || "")
+    .trim()
+    .toLowerCase();
+
+  return Boolean(
+    tablet.dispensed ||
+    tablet.dispensedAt ||
+    status === "dispensed" ||
+    status === "completed",
+  );
+}
+
+function getMissedDose(tablet) {
+  if (isTabletDispensed(tablet)) {
+    return null;
+  }
+
+  const slots = [
+    { label: "Morning", time: tablet.morningTime },
+    { label: "Afternoon", time: tablet.afternoonTime },
+    { label: "Evening", time: tablet.eveningTime || tablet.nightTime },
+  ];
+
+  return slots.find((slot) => {
+    const doseTime = parse12HourTimeToDate(slot.time);
+    if (!doseTime) {
+      return false;
+    }
+
+    const missedAfter = new Date(doseTime);
+    missedAfter.setMinutes(
+      missedAfter.getMinutes() + MISSED_DOSE_GRACE_PERIOD_MINUTES,
+    );
+
+    return Date.now() > missedAfter.getTime();
+  });
+}
+
+function showMissedDoseNotification(patientName, tablet, missedDose) {
+  if (!missedDoseNotifications) {
+    alert(
+      `Missed dose: ${patientName} did not receive ${tablet.tabletName} at ${missedDose.time}. Prescription removed.`,
+    );
+    return;
+  }
+
+  const notification = document.createElement("div");
+  notification.className = "missed-dose-toast";
+  notification.setAttribute("role", "alert");
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "missed-dose-close";
+  closeButton.setAttribute("aria-label", "Close notification");
+  closeButton.textContent = "×";
+
+  const title = document.createElement("strong");
+  title.textContent = "Missed dose removed";
+
+  const message = document.createElement("span");
+  message.textContent = `${patientName} did not receive ${tablet.tabletName || "this medicine"} for the ${missedDose.label.toLowerCase()} dose at ${missedDose.time}.`;
+
+  closeButton.addEventListener("click", () => notification.remove());
+
+  notification.append(closeButton, title, message);
+  missedDoseNotifications.appendChild(notification);
+  setTimeout(() => notification.remove(), 10000);
+}
+
+function removeMissedPrescription(patientName, tabletKey, tablet, missedDose) {
+  const missedKey = `${patientName}/${tabletKey}`;
+  if (missedPrescriptionKeys.has(missedKey)) {
+    return;
+  }
+
+  missedPrescriptionKeys.add(missedKey);
+
+  const tabletRef = ref(
+    databasePrescription,
+    `add_prescription/${patientName}/tablets/${tabletKey}`,
+  );
+
+  remove(tabletRef)
+    .then(() => {
+      showMissedDoseNotification(patientName, tablet, missedDose);
+    })
+    .catch((error) => {
+      missedPrescriptionKeys.delete(missedKey);
+      console.error("Error removing missed prescription:", error);
+      alert("Failed to remove missed prescription from Firebase.");
+    });
 }
 
 function createDispenseCommandLine(slot, time, tabletName) {
@@ -171,13 +302,56 @@ function loadTabletsForPatient(patientName) {
     }
 
     const tabletsData = snapshot.val();
+    let visiblePrescriptionCount = 0;
+
     Object.keys(tabletsData).forEach((tabletKey) => {
       const tablet = tabletsData[tabletKey];
+      const missedDose = getMissedDose(tablet);
+
+      if (missedDose) {
+        removeMissedPrescription(patientName, tabletKey, tablet, missedDose);
+        return;
+      }
+
       const remainingDays = calculateDaysRemaining(
         tablet.startDate,
         tablet.days,
       );
+      visiblePrescriptionCount += 1;
       appendTabletCard(tablet, remainingDays);
+    });
+
+    if (!visiblePrescriptionCount) {
+      tabletList.innerHTML =
+        "<p>No active prescriptions found for this patient.</p>";
+    }
+  });
+}
+
+function monitorMissedPrescriptions() {
+  const prescriptionsRef = ref(databasePrescription, "add_prescription");
+
+  onValue(prescriptionsRef, (snapshot) => {
+    if (!snapshot.exists()) {
+      return;
+    }
+
+    snapshot.forEach((patientSnapshot) => {
+      const patientName = patientSnapshot.key;
+      const tablets = patientSnapshot.val()?.tablets;
+
+      if (!tablets) {
+        return;
+      }
+
+      Object.keys(tablets).forEach((tabletKey) => {
+        const tablet = tablets[tabletKey];
+        const missedDose = getMissedDose(tablet);
+
+        if (missedDose) {
+          removeMissedPrescription(patientName, tabletKey, tablet, missedDose);
+        }
+      });
     });
   });
 }
@@ -326,6 +500,8 @@ clearScheduleButton.addEventListener("click", () => {
 });
 
 loadPatients();
+
+monitorMissedPrescriptions();
 
 renderCommandPreview();
 
