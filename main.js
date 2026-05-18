@@ -49,6 +49,8 @@ const stats = {
 const seenEventIds = new Set();
 const dispensedNotificationKeys = new Set();
 let bridgeEventStream = null;
+let latestPatientsSnapshot = null;
+const prescriptionPatientPhotoByName = new Map();
 
 function updateStatsUI() {
   document.getElementById("stat-patients").textContent = String(stats.patients);
@@ -137,9 +139,30 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function getPatientPhotoUrl(patient) {
+  const candidateKeys = ["photo", "photoURL", "photoUrl", "image", "imageUrl"];
+
+  for (const key of candidateKeys) {
+    const value = patient?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
+function getPrescriptionPhotoByPatientName(patientName) {
+  if (!patientName) return "";
+  const value = prescriptionPatientPhotoByName.get(String(patientName).trim());
+  return typeof value === "string" ? value : "";
+}
+
 function getPatientPhotoMarkup(patient) {
-  if (patient.photo) {
-    return `<img src="${escapeHtml(patient.photo)}" alt="${escapeHtml(patient.name)} photo" />`;
+  const photoUrl =
+    getPatientPhotoUrl(patient) || getPrescriptionPhotoByPatientName(patient?.name);
+  if (photoUrl) {
+    return `<img src="${photoUrl}" alt="${escapeHtml(patient.name)} photo" loading="lazy" />`;
   }
 
   const initial = escapeHtml(
@@ -420,13 +443,12 @@ function connectBridgeEventStream() {
 }
 
 /*************** Skip Notification Logic *****************/
-const dbRef = ref(patientDatabase, "ADDPATIENT FORM");
-onValue(dbRef, (snapshot) => {
+function renderPatientCardsFromSnapshot(snapshot) {
   const cardsContainer = document.querySelector(".cards");
   cardsContainer.innerHTML = "";
   stats.patients = 0;
 
-  if (snapshot.exists()) {
+  if (snapshot?.exists()) {
     const patientCards = [];
 
     snapshot.forEach((childSnapshot) => {
@@ -452,6 +474,12 @@ onValue(dbRef, (snapshot) => {
   }
 
   updateStatsUI();
+}
+
+const dbRef = ref(patientDatabase, "ADDPATIENT FORM");
+onValue(dbRef, (snapshot) => {
+  latestPatientsSnapshot = snapshot;
+  renderPatientCardsFromSnapshot(snapshot);
 });
 
 const prescriptionDbRef = ref(prescriptionDatabase, "add_prescription");
@@ -461,10 +489,17 @@ onValue(prescriptionDbRef, (snapshot) => {
   stats.upcoming = 0;
   stats.dueNow = 0;
 
+  prescriptionPatientPhotoByName.clear();
+
   if (snapshot.exists()) {
     snapshot.forEach((patientSnapshot) => {
       const patientName = patientSnapshot.key;
-      const patientData = patientSnapshot.val();
+      const patientData = patientSnapshot.val() || {};
+      const prescriptionPhoto =
+        getPatientPhotoUrl(patientData) || getPatientPhotoUrl(patientData.patient);
+      if (prescriptionPhoto && patientName) {
+        prescriptionPatientPhotoByName.set(String(patientName).trim(), prescriptionPhoto);
+      }
       const tablets = patientData.tablets;
 
       if (!tablets) return;
@@ -506,6 +541,10 @@ onValue(prescriptionDbRef, (snapshot) => {
   }
 
   updateStatsUI();
+
+  if (latestPatientsSnapshot) {
+    renderPatientCardsFromSnapshot(latestPatientsSnapshot);
+  }
 });
 
 const refreshedAtElement = document.getElementById("refreshed-at");
