@@ -38,48 +38,76 @@ const prescriptionApp = initializeApp(prescriptionAppConfig, "prescriptionApp");
 const patientDatabase = getDatabase(patientApp); // Patient database
 const prescriptionDatabase = getDatabase(prescriptionApp); // Prescription database
 
-/*************** Existing Patient Overview Functionality (Keep this as it is) *****************/
-const dbRef = ref(patientDatabase, "ADDPATIENT FORM");
-onValue(
-  dbRef,
-  (snapshot) => {
-    const cardsContainer = document.querySelector(".cards");
-    cardsContainer.innerHTML = ""; // Clear existing cards
+const stats = {
+  patients: 0,
+  upcoming: 0,
+  dueNow: 0,
+  dispensedToday: 0,
+};
 
-    if (snapshot.exists()) {
-      snapshot.forEach((childSnapshot) => {
-        const patient = childSnapshot.val();
-        const patientKey = childSnapshot.key; // Key to identify which patient to delete
+const seenEventIds = new Set();
 
-        if (patient.name && patient.age && patient.photo) {
-          const cardHTML = `
-            <div class="card" id="${patientKey}">
-              <div class="card-details">
-                <img src="${patient.photo}" alt="Patient Photo" />
-                <p class="text-title">${patient.name}</p>
-                <p class="text-body">Age: ${patient.age}</p>
-                <p class="text-body">Details: ${patient.details}</p>
-              </div>
-              <button class="card-button" data-patient-key="${patientKey}">Delete Patient</button>
-            </div>
-          `;
-          cardsContainer.innerHTML += cardHTML;
-        }
-      });
+function updateStatsUI() {
+  document.getElementById("stat-patients").textContent = String(stats.patients);
+  document.getElementById("stat-upcoming").textContent = String(stats.upcoming);
+  document.getElementById("stat-due-now").textContent = String(stats.dueNow);
+  document.getElementById("stat-dispensed").textContent = String(
+    stats.dispensedToday,
+  );
+}
 
-      // Attach delete functionality to all delete buttons after cards are rendered
-      attachDeleteEventListeners();
-    } else {
-      console.log("No data available");
-      cardsContainer.innerHTML = "<p>No patients found.</p>";
-    }
-  },
-  (error) => {
-    console.error("Error fetching patient data: ", error);
+function parse12HourTimeToDate(time) {
+  const match = time.match(/(\d+):(\d+)\s?(AM|PM)/i);
+  if (!match) {
+    return null;
   }
-);
 
-/*************** Delete Patient Logic *****************/
+  /*************** Delete Patient Logic *****************/
+  const now = new Date();
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3].toUpperCase();
+
+  if (period === "PM" && hours < 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  const target = new Date(now);
+  target.setHours(hours, minutes, 0, 0);
+  return target;
+}
+
+function getDoseStatus(timeLabel) {
+  const target = parse12HourTimeToDate(timeLabel);
+  if (!target)
+    return { label: "Invalid", className: "invalid", deltaMin: null };
+
+  const deltaMs = target.getTime() - Date.now();
+  const deltaMin = Math.round(deltaMs / 60000);
+
+  if (Math.abs(deltaMin) <= 10)
+    return { label: "Due now", className: "due", deltaMin };
+  if (deltaMin > 10)
+    return { label: `In ${deltaMin} min`, className: "upcoming", deltaMin };
+
+  return {
+    label: `${Math.abs(deltaMin)} min overdue`,
+    className: "overdue",
+    deltaMin,
+  };
+}
+
+function normalizeSlot(slotName) {
+  return String(slotName || "")
+    .trim()
+    .toUpperCase();
+}
+
+function slotToLabel(slot) {
+  if (slot === "MORNING") return "Morning";
+  if (slot === "AFTERNOON") return "Afternoon";
+  return "Evening";
+}
+
 function attachDeleteEventListeners() {
   const deleteButtons = document.querySelectorAll(".card-button");
 
@@ -87,149 +115,280 @@ function attachDeleteEventListeners() {
     button.addEventListener("click", (event) => {
       const patientKey = event.target.getAttribute("data-patient-key");
 
-      // Confirm the deletion
-      if (confirm("Are you sure you want to delete this patient?")) {
-        // Delete the patient from Firebase
-        const patientRef = ref(
-          patientDatabase,
-          `ADDPATIENT FORM/${patientKey}`
-        );
-
-        remove(patientRef)
-          .then(() => {
-            console.log(`Patient ${patientKey} deleted successfully.`);
-
-            // Remove the patient card from the DOM
-            const patientCard = document.getElementById(patientKey);
-            if (patientCard) {
-              patientCard.remove();
-            }
-          })
-          .catch((error) => {
-            console.error("Error deleting patient: ", error);
-          });
+      if (!confirm("Are you sure you want to delete this patient?")) {
+        return;
       }
+
+      const patientRef = ref(patientDatabase, `ADDPATIENT FORM/${patientKey}`);
+      remove(patientRef)
+        .then(() => {
+          const patientCard = document.getElementById(patientKey);
+          if (patientCard) {
+            patientCard.remove();
+          }
+        })
+        .catch((error) => {
+          console.error("Error deleting patient:", error);
+        });
     });
   });
 }
 
 /*************** New Functionality: Fetching Prescriptions from 'add-prescription' *****************/
-function createNotificationCard(patientName, time, notificationKey) {
+function createNotificationCard(
+  patientName,
+  tabletName,
+  slotName,
+  time,
+  statusInfo,
+  notificationKey,
+) {
+  const normalizedSlot = normalizeSlot(slotName);
+
   return `
-    <div class="info" id="${notificationKey}">
+      <div class="info ${statusInfo.className}" id="${notificationKey}" data-slot="${normalizedSlot}" data-status="${statusInfo.className}">
       <div class="info__icon">
         <img src="main/info.png" alt="Info Icon" />
       </div>
       <div class="info__title">
-        <h3>Upcoming Medication</h3>
-        <p>${patientName}: ${time}</p>
+        <h3>${patientName} • ${tabletName}</h3>
+        <p>${slotName}: ${time}</p>
       </div>
-      <span class="skip-icon" data-notification-key="${notificationKey}">&times;</span> <!-- Skip Icon -->
+     <span class="dose-status ${statusInfo.className}">${statusInfo.label}</span>
+      <span class="skip-icon" data-notification-key="${notificationKey}">&times;</span>
     </div>
   `;
 }
 
-// Helper function to check if a given time has passed
-function hasTimePassed(time) {
-  const [hour, minute, period] = time.match(/(\d+):(\d+) (\w+)/).slice(1);
-  const date = new Date();
-  let hours = parseInt(hour);
-
-  // Convert 12-hour format to 24-hour format for comparison
-  if (period === "PM" && hours < 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-
-  const timeToCompare = new Date();
-  timeToCompare.setHours(hours, minute, 0);
-
-  return timeToCompare < date;
-}
-
-// Fetch prescription details from the 'add_prescription' Firebase app
-const prescriptionDbRef = ref(prescriptionDatabase, "add_prescription");
-
-onValue(
-  prescriptionDbRef,
-  (snapshot) => {
-    const notificationsContainer = document.querySelector(".ncards");
-    notificationsContainer.innerHTML = ""; // Clear existing notifications
-
-    if (snapshot.exists()) {
-      snapshot.forEach((patientSnapshot) => {
-        const patientName = patientSnapshot.key; // Patient's name
-        const patientData = patientSnapshot.val();
-
-        const tablets = patientData.tablets;
-
-        // Check if patient has any prescriptions
-        if (tablets) {
-          Object.keys(tablets).forEach((tabletKey) => {
-            const tablet = tablets[tabletKey];
-
-            // Process all available times (morning, afternoon, evening)
-            if (tablet.morningTime && !hasTimePassed(tablet.morningTime)) {
-              const notificationKey = `${patientName}-${tabletKey}-morning`;
-              const notificationHTML = createNotificationCard(
-                patientName,
-                tablet.morningTime,
-                notificationKey
-              );
-              notificationsContainer.innerHTML += notificationHTML;
-            }
-
-            if (tablet.afternoonTime && !hasTimePassed(tablet.afternoonTime)) {
-              const notificationKey = `${patientName}-${tabletKey}-afternoon`;
-              const notificationHTML = createNotificationCard(
-                patientName,
-                tablet.afternoonTime,
-                notificationKey
-              );
-              notificationsContainer.innerHTML += notificationHTML;
-            }
-
-            if (tablet.eveningTime && !hasTimePassed(tablet.eveningTime)) {
-              const notificationKey = `${patientName}-${tabletKey}-evening`;
-              const notificationHTML = createNotificationCard(
-                patientName,
-                tablet.eveningTime,
-                notificationKey
-              );
-              notificationsContainer.innerHTML += notificationHTML;
-            }
-          });
-        }
-      });
-
-      // Attach skip functionality to each skip icon
-      attachSkipEventListeners();
-    } else {
-      console.log("No prescription data available");
-      notificationsContainer.innerHTML = "<p>No notifications found.</p>";
-    }
-  },
-  (error) => {
-    console.error("Error fetching prescription data:", error);
-  }
-);
-
-/*************** Skip Notification Logic *****************/
 function attachSkipEventListeners() {
   const skipIcons = document.querySelectorAll(".skip-icon");
-
   skipIcons.forEach((icon) => {
     icon.addEventListener("click", (event) => {
       const notificationKey = event.target.getAttribute(
-        "data-notification-key"
+        "data-notification-key",
       );
+      if (!confirm("Skip this notification?")) {
+        return;
+      }
 
-      // Confirm the skip action
-      if (confirm("Are you sure you want to skip this notification?")) {
-        // Remove the notification card from the DOM
-        const notificationCard = document.getElementById(notificationKey);
-        if (notificationCard) {
-          notificationCard.remove();
-        }
+      const notificationCard = document.getElementById(notificationKey);
+      if (notificationCard) {
+        notificationCard.remove();
       }
     });
   });
 }
+
+function showBrowserNotification(title, body) {
+  if (!("Notification" in window)) return;
+
+  if (Notification.permission === "granted") {
+    new Notification(title, { body });
+    return;
+  }
+
+  if (Notification.permission !== "denied") {
+    Notification.requestPermission();
+  }
+}
+
+function renderLiveEvent(event) {
+  const liveFeed = document.getElementById("live-feed");
+  if (!liveFeed) return;
+
+  const line = document.createElement("div");
+  line.className = `live-event ${event.type || "info"}`;
+  line.textContent = `${new Date(event.timestamp || Date.now()).toLocaleTimeString()} • ${event.message}`;
+
+  liveFeed.prepend(line);
+  if (liveFeed.children.length > 40) {
+    liveFeed.removeChild(liveFeed.lastChild);
+  }
+}
+
+function markNotificationAsDispensed(slot) {
+  const normalizedSlot = normalizeSlot(slot);
+  if (!normalizedSlot) return;
+
+  const priorityQuery = [
+    `.info[data-slot="${normalizedSlot}"][data-status="due"]`,
+    `.info[data-slot="${normalizedSlot}"][data-status="overdue"]`,
+    `.info[data-slot="${normalizedSlot}"][data-status="upcoming"]`,
+  ];
+
+  const candidate = priorityQuery
+    .map((query) => document.querySelector(query))
+    .find((element) => Boolean(element));
+
+  if (!candidate) {
+    return;
+  }
+
+  const oldStatus = candidate.dataset.status;
+  const badge = candidate.querySelector(".dose-status");
+
+  candidate.classList.remove("due", "overdue", "upcoming", "invalid");
+  candidate.classList.add("dispensed");
+  candidate.dataset.status = "dispensed";
+
+  if (badge) {
+    badge.classList.remove("due", "overdue", "upcoming", "invalid");
+    badge.classList.add("dispensed");
+    badge.textContent = "Dispensed";
+  }
+
+  const titleElement = candidate.querySelector(".info__title p");
+  if (titleElement && !titleElement.textContent.includes("• Dispensed")) {
+    titleElement.textContent = `${titleElement.textContent} • Dispensed`;
+  }
+
+  if (oldStatus === "due") {
+    stats.dueNow = Math.max(0, stats.dueNow - 1);
+  }
+
+  if (oldStatus === "upcoming") {
+    stats.upcoming = Math.max(0, stats.upcoming - 1);
+  }
+
+  updateStatsUI();
+}
+
+function ingestBridgeEvents(events) {
+  events.forEach((event) => {
+    if (!event.id || seenEventIds.has(event.id)) {
+      return;
+    }
+    seenEventIds.add(event.id);
+    renderLiveEvent(event);
+
+    if (event.type === "dispensed") {
+      stats.dispensedToday += 1;
+      markNotificationAsDispensed(event.slot || "");
+      updateStatsUI();
+      showBrowserNotification("Medicine dispensed", event.message);
+    }
+
+    if (event.type === "blocked") {
+      showBrowserNotification("Dispense blocked", event.message);
+    }
+  });
+}
+
+async function pollBridgeEvents() {
+  const bridgeBanner = document.getElementById("bridge-banner");
+
+  try {
+    const healthResponse = await fetch("http://127.0.0.1:8787/health");
+    if (!healthResponse.ok) throw new Error("Bridge unavailable");
+
+    bridgeBanner.textContent = "Bridge: connected (real-time updates active)";
+    bridgeBanner.classList.add("online");
+
+    const recentResponse = await fetch("http://127.0.0.1:8787/events/recent");
+    const recent = await recentResponse.json();
+    if (Array.isArray(recent.events)) {
+      ingestBridgeEvents(recent.events);
+    }
+  } catch (error) {
+    bridgeBanner.textContent =
+      "Bridge: offline. Start hardware_bridge.js --server for live dispense notifications.";
+    bridgeBanner.classList.remove("online");
+  }
+}
+
+/*************** Skip Notification Logic *****************/
+const dbRef = ref(patientDatabase, "ADDPATIENT FORM");
+onValue(dbRef, (snapshot) => {
+  const cardsContainer = document.querySelector(".cards");
+  cardsContainer.innerHTML = "";
+  stats.patients = 0;
+
+  if (snapshot.exists()) {
+    snapshot.forEach((childSnapshot) => {
+      const patient = childSnapshot.val();
+      const patientKey = childSnapshot.key;
+
+      if (patient.name && patient.age && patient.photo) {
+        stats.patients += 1;
+        const cardHTML = `
+          <div class="card" id="${patientKey}">
+            <div class="card-details">
+              <img src="${patient.photo}" alt="Patient Photo" />
+              <p class="text-title">${patient.name}</p>
+              <p class="text-body">Age: ${patient.age}</p>
+              <p class="text-body">Details: ${patient.details || "-"}</p>
+            </div>
+            <button class="card-button" data-patient-key="${patientKey}">Delete Patient</button>
+          </div>
+        `;
+        cardsContainer.innerHTML += cardHTML;
+      }
+    });
+    attachDeleteEventListeners();
+  } else {
+    cardsContainer.innerHTML = "<p>No patients found.</p>";
+  }
+
+  updateStatsUI();
+});
+
+const prescriptionDbRef = ref(prescriptionDatabase, "add_prescription");
+onValue(prescriptionDbRef, (snapshot) => {
+  const notificationsContainer = document.querySelector(".ncards");
+  notificationsContainer.innerHTML = "";
+  stats.upcoming = 0;
+  stats.dueNow = 0;
+
+  if (snapshot.exists()) {
+    snapshot.forEach((patientSnapshot) => {
+      const patientName = patientSnapshot.key;
+      const patientData = patientSnapshot.val();
+      const tablets = patientData.tablets;
+
+      if (!tablets) return;
+
+      Object.keys(tablets).forEach((tabletKey) => {
+        const tablet = tablets[tabletKey];
+        const slots = [
+          { name: "Morning", time: tablet.morningTime },
+          { name: "Afternoon", time: tablet.afternoonTime },
+          { name: "Evening", time: tablet.eveningTime || tablet.nightTime },
+        ];
+
+        slots.forEach((slot) => {
+          if (!slot.time) return;
+
+          const status = getDoseStatus(slot.time);
+          if (status.className === "upcoming") stats.upcoming += 1;
+          if (status.className === "due") stats.dueNow += 1;
+
+          const notificationKey = `${patientName}-${tabletKey}-${slot.name}`;
+          notificationsContainer.innerHTML += createNotificationCard(
+            patientName,
+            tablet.tabletName || tabletKey,
+            slot.name,
+            slot.time,
+            status,
+            notificationKey,
+          );
+        });
+      });
+    });
+
+    attachSkipEventListeners();
+  } else {
+    notificationsContainer.innerHTML = "<p>No notifications found.</p>";
+  }
+
+  updateStatsUI();
+});
+
+const refreshedAtElement = document.getElementById("refreshed-at");
+setInterval(() => {
+  if (refreshedAtElement) {
+    refreshedAtElement.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+  }
+}, 1000);
+
+pollBridgeEvents();
+setInterval(pollBridgeEvents, 5000);

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -24,22 +24,59 @@
             </a>
           </button>
 
-          <button><a href="../container/container.html">Container</a></button>
+          <!-- <button><a href="../container/container.html">Container</a></button> -->
           <button href="#">Logout</button>
+        </div>
+      </div>
+
+      <div class="page-header">
+        <div>
+          <h1>Caregiver Command Center</h1>
+          <p>
+            Track patients, upcoming doses, and live dispense status in one
+            place.
+          </p>
+        </div>
+        <p id="refreshed-at" class="refreshed-at">Last updated: --</p>
+      </div>
+
+      <div class="dashboard-stats" id="dashboard-stats">
+        <div class="stat-card">
+          <h3>Total Patients</h3>
+          <p id="stat-patients">0</p>
+        </div>
+        <div class="stat-card">
+          <h3>Upcoming Doses</h3>
+          <p id="stat-upcoming">0</p>
+        </div>
+        <div class="stat-card">
+          <h3>Due Now</h3>
+          <p id="stat-due-now">0</p>
+        </div>
+        <div class="stat-card">
+          <h3>Dispensed Today</h3>
+          <p id="stat-dispensed">0</p>
         </div>
       </div>
       <div class="main">
         <div class="overview">
-          <h2 style="text-align: center">Patient Overview</h2>
+          <h2>Patient Overview</h2>
           <div class="cards">
             <!-- Dynamic Cards Will Be Rendered Here -->
           </div>
         </div>
-        <div class="notification">
-          <h2>Notification</h2>
-          <div class="ncards">
-            <!-- Dynamic Notification Cards Will Be Rendered Here -->
+        <div class="notification panel">
+          <!-- <h2>Notification</h2> -->
+          <!-- <div class="ncards"> -->
+          <!-- Dynamic Notification Cards Will Be Rendered Here -->
+          <!-- </div> -->
+          <h2>Medication Notifications</h2>
+          <div class="bridge-banner" id="bridge-banner">
+            Bridge: checking connection...
           </div>
+          <div class="ncards"></div>
+          <h3 class="live-feed-title">Real-time Dispense Feed</h3>
+          <div class="live-feed" id="live-feed"></div>
         </div>
       </div>
     </div>

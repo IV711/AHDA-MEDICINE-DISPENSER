@@ -15,7 +15,29 @@ const fs = require("fs");
 const http = require("http");
 
 let activeEvents = [];
+//added
+let recentEvents = [];
+let eventCounter = 0;
+let sseClients = [];
+const pendingBySlot = new Map();
 
+function pushBridgeEvent(type, message, extra = {}) {
+  const event = {
+    id: `evt-${Date.now()}-${(eventCounter += 1)}`,
+    type,
+    message,
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+
+  recentEvents.unshift(event);
+  recentEvents = recentEvents.slice(0, 100);
+
+  sseClients.forEach((client) => {
+    client.write(`data: ${JSON.stringify(event)}\n\n`);
+  });
+}
+//added
 function parseArgs(argv) {
   const args = {
     schedule: null,
@@ -71,9 +93,12 @@ function normalizeEvents(entries) {
 
   entries.forEach((entry) => {
     const days = Number(entry.days || 0);
-    if (!days) {
-      return;
-    }
+    //added
+    if (!days) return;
+    //added
+    // if (!days) {
+    //   return;
+    // }
 
     const slots = [
       { slot: "MORNING", time: entry.morningTime },
@@ -98,12 +123,53 @@ function normalizeEvents(entries) {
 
   return events;
 }
+//added
 
+function handleArduinoLine(line) {
+  const trimmed = line.trim();
+  if (!trimmed) return;
+
+  process.stdout.write(`[ARDUINO] ${trimmed}\n`);
+
+  const okMatch = trimmed.match(/^OK:DISPENSE:(MORNING|AFTERNOON|NIGHT)$/);
+  if (okMatch) {
+    const slot = okMatch[1];
+    const pending = pendingBySlot.get(slot);
+    pushBridgeEvent(
+      "dispensed",
+      `${slot} dose dispensed${pending ? ` (${pending.tabletName})` : ""}`,
+      { slot },
+    );
+    pendingBySlot.delete(slot);
+    return;
+  }
+
+  const blockedMatch = trimmed.match(/^ERR:NO_CUP:(MORNING|AFTERNOON|NIGHT)$/);
+  if (blockedMatch) {
+    const slot = blockedMatch[1];
+    pushBridgeEvent("blocked", `${slot} dispense blocked: no cup detected.`, {
+      slot,
+    });
+    pendingBySlot.delete(slot);
+  }
+}
+
+//added
 async function openSerialWriter(args) {
   if (args.dryRun) {
     return {
       async writeLine(line) {
         console.log(`[DRY-RUN] ${line}`);
+        //added
+        const slot = line.split(":")[1];
+        pushBridgeEvent(
+          "dispensed",
+          `${slot} dose simulated in dry-run mode.`,
+          {
+            slot,
+          },
+        );
+        //added
       },
     };
   }
@@ -126,8 +192,18 @@ async function openSerialWriter(args) {
     baudRate: args.baud,
   });
 
+  //added
+  let buffer = "";
+  //added
+
   serial.on("data", (chunk) => {
-    process.stdout.write(`[ARDUINO] ${chunk.toString()}`);
+    // process.stdout.write(`[ARDUINO] ${chunk.toString()}`);
+    //added
+    buffer += chunk.toString();
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+    lines.forEach((line) => handleArduinoLine(line));
+    //added
   });
 
   return {
@@ -143,30 +219,54 @@ function todayKey(dateObj) {
 
 function tickScheduler(events, writer) {
   const now = new Date();
-  const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(
-    now.getMinutes(),
-  ).padStart(2, "0")}`;
+  // const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(
+  //   now.getMinutes(),
+  // ).padStart(2, "0")}`;
+  const currentHHMM = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   const dayKey = todayKey(now);
 
   events.forEach(async (event) => {
-    if (event.remainingDays <= 0) {
-      return;
-    }
+    // if (event.remainingDays <= 0) {
+    //   return;
+    // }
 
-    if (event.time !== currentHHMM) {
-      return;
-    }
+    // if (event.time !== currentHHMM) {
+    //   return;
+    // }
 
-    if (event.lastDispensedOn === dayKey) {
+    // if (event.lastDispensedOn === dayKey) {
+    //   return;
+    // }
+
+    if (
+      event.remainingDays <= 0 ||
+      event.time !== currentHHMM ||
+      event.lastDispensedOn === dayKey
+    )
       return;
-    }
 
     const command = `DISPENSE:${event.slot}`;
+    // console.log(
+    //   `[${new Date().toISOString()}] Dispatching ${command} for ${event.tabletName}`,
+    // );
     console.log(
       `[${new Date().toISOString()}] Dispatching ${command} for ${event.tabletName}`,
     );
 
+    // await writer.writeLine(command);
+
+    //added
+    pendingBySlot.set(event.slot, {
+      tabletName: event.tabletName,
+      sentAt: Date.now(),
+    });
+    pushBridgeEvent("sent", `Sent ${command} for ${event.tabletName}`, {
+      slot: event.slot,
+      tabletName: event.tabletName,
+    });
+
     await writer.writeLine(command);
+    //added
 
     event.lastDispensedOn = dayKey;
     event.remainingDays -= 1;
@@ -189,8 +289,38 @@ function startHttpServer(args) {
       return;
     }
 
+    //added
+    if (request.method === "GET" && request.url === "/events") {
+      response.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      });
+      response.write("\n");
+      sseClients.push(response);
+      request.on("close", () => {
+        sseClients = sseClients.filter((client) => client !== response);
+      });
+      return;
+    }
+
+    if (request.method === "GET" && request.url === "/events/recent") {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ ok: true, events: recentEvents }));
+      return;
+    }
+
+    //added
+
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "Content-Type": "application/json" });
+      // response.end(
+      //   JSON.stringify({
+      //     ok: true,
+      //     mode: "server",
+      //     loadedEvents: activeEvents.length,
+      //   }),
+      // );
       response.end(
         JSON.stringify({
           ok: true,
@@ -210,13 +340,28 @@ function startHttpServer(args) {
       request.on("end", () => {
         try {
           const payload = JSON.parse(body);
-          if (!Array.isArray(payload.entries)) {
+          // if (!Array.isArray(payload.entries)) {
+          //   throw new Error("entries[] missing");
+          // }
+          if (!Array.isArray(payload.entries))
             throw new Error("entries[] missing");
-          }
 
           activeEvents = normalizeEvents(payload.entries);
+          //added
+          pushBridgeEvent(
+            "system",
+            `Loaded ${activeEvents.length} dispense events from web UI.`,
+          );
+          //added
 
           response.writeHead(200, { "Content-Type": "application/json" });
+          // response.end(
+          //   JSON.stringify({
+          //     ok: true,
+          //     loadedEvents: activeEvents.length,
+          //     receivedAt: new Date().toLocaleTimeString(),
+          //   }),
+          // );
           response.end(
             JSON.stringify({
               ok: true,
@@ -237,6 +382,9 @@ function startHttpServer(args) {
   });
 
   server.listen(args.httpPort, "127.0.0.1", () => {
+    // console.log(
+    //   `Bridge server listening on http://127.0.0.1:${args.httpPort} (POST /schedule)`,
+    // );
     console.log(
       `Bridge server listening on http://127.0.0.1:${args.httpPort} (POST /schedule)`,
     );
@@ -252,6 +400,9 @@ async function main() {
   } else {
     const schedule = loadSchedule(args.schedule);
     activeEvents = normalizeEvents(schedule.entries);
+    // console.log(
+    //   `Loaded ${activeEvents.length} timed dispense events from file.`,
+    // );
     console.log(
       `Loaded ${activeEvents.length} timed dispense events from file.`,
     );
@@ -260,9 +411,10 @@ async function main() {
   console.log("Scheduler started. Checking every 20 seconds...");
 
   tickScheduler(activeEvents, writer);
-  setInterval(() => {
-    tickScheduler(activeEvents, writer);
-  }, 20_000);
+  // setInterval(() => {
+  //   tickScheduler(activeEvents, writer);
+  // }, 20_000);
+  setInterval(() => tickScheduler(activeEvents, writer), 20_000);
 }
 
 main().catch((error) => {
