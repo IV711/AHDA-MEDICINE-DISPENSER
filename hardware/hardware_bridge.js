@@ -112,6 +112,8 @@ function normalizeEvents(entries) {
       }
 
       events.push({
+        patientName: entry.patientName || "Unknown patient",
+        tabletKey: entry.tabletKey || null,
         tabletName: entry.tabletName || "Unknown",
         slot,
         time,
@@ -138,7 +140,12 @@ function handleArduinoLine(line) {
     pushBridgeEvent(
       "dispensed",
       `${slot} dose dispensed${pending ? ` (${pending.tabletName})` : ""}`,
-      { slot },
+      {
+        slot,
+        patientName: pending?.patientName,
+        tabletKey: pending?.tabletKey,
+        tabletName: pending?.tabletName,
+      },
     );
     pendingBySlot.delete(slot);
     return;
@@ -162,13 +169,18 @@ async function openSerialWriter(args) {
         console.log(`[DRY-RUN] ${line}`);
         //added
         const slot = line.split(":")[1];
+        const pending = pendingBySlot.get(slot);
         pushBridgeEvent(
           "dispensed",
-          `${slot} dose simulated in dry-run mode.`,
+          `${slot} dose simulated in dry-run mode${pending ? ` (${pending.tabletName})` : ""}.`,
           {
             slot,
+            patientName: pending?.patientName,
+            tabletKey: pending?.tabletKey,
+            tabletName: pending?.tabletName,
           },
         );
+        pendingBySlot.delete(slot);
         //added
       },
     };
@@ -257,11 +269,15 @@ function tickScheduler(events, writer) {
 
     //added
     pendingBySlot.set(event.slot, {
+      patientName: event.patientName,
+      tabletKey: event.tabletKey,
       tabletName: event.tabletName,
       sentAt: Date.now(),
     });
     pushBridgeEvent("sent", `Sent ${command} for ${event.tabletName}`, {
       slot: event.slot,
+      patientName: event.patientName,
+      tabletKey: event.tabletKey,
       tabletName: event.tabletName,
     });
 
