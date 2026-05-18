@@ -137,9 +137,23 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function getPatientPhotoUrl(patient) {
+  const candidateKeys = ["photo", "photoURL", "photoUrl", "image", "imageUrl"];
+
+  for (const key of candidateKeys) {
+    const value = patient?.[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
 function getPatientPhotoMarkup(patient) {
-  if (patient.photo) {
-    return `<img src="${escapeHtml(patient.photo)}" alt="${escapeHtml(patient.name)} photo" />`;
+  const photoUrl = getPatientPhotoUrl(patient);
+  if (photoUrl) {
+    return `<img src="${photoUrl}" alt="${escapeHtml(patient.name)} photo" loading="lazy" />`;
   }
 
   const initial = escapeHtml(
