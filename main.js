@@ -7,6 +7,10 @@ import {
   signOut,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 import {
+  getAuth,
+  signOut,
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+import {
   getDatabase,
   onValue,
   ref,
@@ -850,4 +854,5 @@ if (logoutButton) {
 }
 
 pollBridgeEvents();
+connectBridgeEventStream();
 setInterval(pollBridgeEvents, 5000);
