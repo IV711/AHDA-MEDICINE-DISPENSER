@@ -7,6 +7,7 @@
     <title>Add Prescription</title>
   </head>
   <body>
+    <div id="missed-dose-notifications" class="missed-dose-notifications"></div>
     <div class="container">
       <div class="navbar">
         <div class="logo sidebar">
@@ -107,12 +108,15 @@
       </div>
 
       <div class="hardware-plan" id="hardware-plan">
-        <h3>Hardware Command Preview</h3>
-        <p>Use these commands while building the Arduino integration.</p>
+        <h3>Hardware Schedule Review</h3>
+        <p>
+          Review the schedule in plain language, then send it to the hardware
+          bridge.
+        </p>
         <pre id="command-preview"></pre>
         <div class="hardware-actions">
           <button type="button" id="export-schedule" class="add-tablet-btn">
-            Export Schedule JSON
+            Review Schedule
           </button>
           <button type="button" id="send-to-bridge" class="add-tablet-btn">
             Send to Hardware Bridge

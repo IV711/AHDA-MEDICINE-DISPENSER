@@ -4,6 +4,7 @@ import {
   onValue,
   ref,
   remove, // Import remove for deletion
+  update,
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
 // Firebase configuration for 'addpatients' (for patient overview)
@@ -46,6 +47,8 @@ const stats = {
 };
 
 const seenEventIds = new Set();
+const dispensedNotificationKeys = new Set();
+let bridgeEventStream = null;
 
 function updateStatsUI() {
   document.getElementById("stat-patients").textContent = String(stats.patients);
@@ -76,7 +79,24 @@ function parse12HourTimeToDate(time) {
   return target;
 }
 
-function getDoseStatus(timeLabel) {
+function isTabletDispensed(tablet) {
+  const status = String(tablet.status || tablet.dispenseStatus || "")
+    .trim()
+    .toLowerCase();
+
+  return Boolean(
+    tablet.dispensed ||
+    tablet.dispensedAt ||
+    status === "dispensed" ||
+    status === "completed",
+  );
+}
+
+function getDoseStatus(timeLabel, tablet = {}) {
+  if (isTabletDispensed(tablet)) {
+    return { label: "Dispensed", className: "dispensed", deltaMin: null };
+  }
+
   const target = parse12HourTimeToDate(timeLabel);
   if (!target)
     return { label: "Invalid", className: "invalid", deltaMin: null };
@@ -142,11 +162,12 @@ function createNotificationCard(
   time,
   statusInfo,
   notificationKey,
+  tabletKey,
 ) {
   const normalizedSlot = normalizeSlot(slotName);
 
   return `
-      <div class="info ${statusInfo.className}" id="${notificationKey}" data-slot="${normalizedSlot}" data-status="${statusInfo.className}">
+      <div class="info ${statusInfo.className}" id="${notificationKey}" data-slot="${normalizedSlot}" data-status="${statusInfo.className}" data-patient-name="${patientName}" data-tablet-name="${tabletName}" data-tablet-key="${tabletKey}">
       <div class="info__icon">
         <img src="main/info.png" alt="Info Icon" />
       </div>
@@ -188,7 +209,11 @@ function showBrowserNotification(title, body) {
   }
 
   if (Notification.permission !== "denied") {
-    Notification.requestPermission();
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        new Notification(title, { body });
+      }
+    });
   }
 }
 
@@ -206,27 +231,45 @@ function renderLiveEvent(event) {
   }
 }
 
-function markNotificationAsDispensed(slot) {
-  const normalizedSlot = normalizeSlot(slot);
-  if (!normalizedSlot) return;
+function findDispenseNotification(event) {
+  const normalizedSlot = normalizeSlot(event.slot);
+  if (!normalizedSlot) return null;
 
-  const priorityQuery = [
-    `.info[data-slot="${normalizedSlot}"][data-status="due"]`,
-    `.info[data-slot="${normalizedSlot}"][data-status="overdue"]`,
-    `.info[data-slot="${normalizedSlot}"][data-status="upcoming"]`,
-  ];
+  const candidates = Array.from(
+    document.querySelectorAll(`.info[data-slot="${normalizedSlot}"]`),
+  );
 
-  const candidate = priorityQuery
-    .map((query) => document.querySelector(query))
-    .find((element) => Boolean(element));
+  return (
+    candidates.find(
+      (element) =>
+        event.tabletKey && element.dataset.tabletKey === event.tabletKey,
+    ) ||
+    candidates.find(
+      (element) =>
+        event.patientName &&
+        event.tabletName &&
+        element.dataset.patientName === event.patientName &&
+        element.dataset.tabletName === event.tabletName,
+    ) ||
+    candidates.find((element) => element.dataset.status === "due") ||
+    candidates.find((element) => element.dataset.status === "overdue") ||
+    candidates.find((element) => element.dataset.status === "upcoming") ||
+    null
+  );
+}
+
+function markNotificationAsDispensed(event) {
+  const candidate = findDispenseNotification(event);
 
   if (!candidate) {
     return;
   }
 
+  const notificationKey = candidate.id;
   const oldStatus = candidate.dataset.status;
   const badge = candidate.querySelector(".dose-status");
 
+  dispensedNotificationKeys.add(notificationKey);
   candidate.classList.remove("due", "overdue", "upcoming", "invalid");
   candidate.classList.add("dispensed");
   candidate.dataset.status = "dispensed";
@@ -253,6 +296,26 @@ function markNotificationAsDispensed(slot) {
   updateStatsUI();
 }
 
+function saveDispensedStatus(event) {
+  if (!event.patientName || !event.tabletKey) {
+    return;
+  }
+
+  const tabletRef = ref(
+    prescriptionDatabase,
+    `add_prescription/${event.patientName}/tablets/${event.tabletKey}`,
+  );
+
+  update(tabletRef, {
+    dispensed: true,
+    dispensedAt: new Date(event.timestamp || Date.now()).toISOString(),
+    dispensedSlot: slotToLabel(normalizeSlot(event.slot)),
+    status: "dispensed",
+  }).catch((error) => {
+    console.error("Error saving dispensed status:", error);
+  });
+}
+
 function ingestBridgeEvents(events) {
   events.forEach((event) => {
     if (!event.id || seenEventIds.has(event.id)) {
@@ -263,7 +326,8 @@ function ingestBridgeEvents(events) {
 
     if (event.type === "dispensed") {
       stats.dispensedToday += 1;
-      markNotificationAsDispensed(event.slot || "");
+      markNotificationAsDispensed(event);
+      saveDispensedStatus(event);
       updateStatsUI();
       showBrowserNotification("Medicine dispensed", event.message);
     }
@@ -294,6 +358,31 @@ async function pollBridgeEvents() {
       "Bridge: offline. Start hardware_bridge.js --server for live dispense notifications.";
     bridgeBanner.classList.remove("online");
   }
+}
+
+function connectBridgeEventStream() {
+  if (!("EventSource" in window) || bridgeEventStream) {
+    return;
+  }
+
+  const bridgeBanner = document.getElementById("bridge-banner");
+  bridgeEventStream = new EventSource("http://127.0.0.1:8787/events");
+
+  bridgeEventStream.onopen = () => {
+    bridgeBanner.textContent = "Bridge: connected (live event stream active)";
+    bridgeBanner.classList.add("online");
+  };
+
+  bridgeEventStream.onmessage = (message) => {
+    const event = JSON.parse(message.data);
+    ingestBridgeEvents([event]);
+  };
+
+  bridgeEventStream.onerror = () => {
+    bridgeBanner.textContent =
+      "Bridge: reconnecting live event stream. Polling remains active.";
+    bridgeBanner.classList.remove("online");
+  };
 }
 
 /*************** Skip Notification Logic *****************/
@@ -358,11 +447,13 @@ onValue(prescriptionDbRef, (snapshot) => {
         slots.forEach((slot) => {
           if (!slot.time) return;
 
-          const status = getDoseStatus(slot.time);
+          const notificationKey = `${patientName}-${tabletKey}-${slot.name}`;
+          const status = dispensedNotificationKeys.has(notificationKey)
+            ? { label: "Dispensed", className: "dispensed", deltaMin: null }
+            : getDoseStatus(slot.time, tablet);
           if (status.className === "upcoming") stats.upcoming += 1;
           if (status.className === "due") stats.dueNow += 1;
 
-          const notificationKey = `${patientName}-${tabletKey}-${slot.name}`;
           notificationsContainer.innerHTML += createNotificationCard(
             patientName,
             tablet.tabletName || tabletKey,
@@ -370,6 +461,7 @@ onValue(prescriptionDbRef, (snapshot) => {
             slot.time,
             status,
             notificationKey,
+            tabletKey,
           );
         });
       });
@@ -391,4 +483,5 @@ setInterval(() => {
 }, 1000);
 
 pollBridgeEvents();
+connectBridgeEventStream();
 setInterval(pollBridgeEvents, 5000);
