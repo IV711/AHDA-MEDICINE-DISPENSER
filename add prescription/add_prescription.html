@@ -7,6 +7,7 @@
     <title>Add Prescription</title>
   </head>
   <body>
+    <div id="missed-dose-notifications" class="notification-container" aria-live="assertive"></div>
     <div class="container">
       <div class="navbar">
         <div class="logo sidebar">
@@ -134,40 +135,7 @@
         <h3>Added Tablets</h3>
       </div>
 
-      <script>
-        const prescriptionForm = document.getElementById("prescription-form");
-        const tabletList = document.getElementById("tablet-list");
-
-        prescriptionForm.addEventListener("submit", function (e) {
-          e.preventDefault();
-
-          // Get form values
-          const tabletName = document.getElementById("tablet-name").value;
-          const morningTime = document.getElementById("morning-time").value;
-          const afternoonTime = document.getElementById("afternoon-time").value;
-          const eveningTime = document.getElementById("evening-time").value;
-          const days = document.getElementById("days").value;
-
-          // Create a new card for the tablet
-          const tabletCard = document.createElement("div");
-          tabletCard.classList.add("tablet-entry");
-          tabletCard.innerHTML = `
-            <div class="tablet-row">
-              <span class="tablet-name">${tabletName}</span>
-              <span class="tablet-time">${morningTime}</span>
-              <span class="tablet-time">${afternoonTime}</span>
-              <span class="tablet-time">${eveningTime}</span>
-              <span class="tablet-days">${days} days</span>
-            </div>
-          `;
-
-          // Append the new card to the tablet list
-          tabletList.appendChild(tabletCard);
-
-          // Reset the form fields
-          prescriptionForm.reset();
-        });
-      </script>
+      <script type="module" src="add_prescription.js"></script>
     </div>
   </body>
 </html>
