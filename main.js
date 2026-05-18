@@ -128,6 +128,40 @@ function slotToLabel(slot) {
   return "Evening";
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function getPatientPhotoMarkup(patient) {
+  if (patient.photo) {
+    return `<img src="${escapeHtml(patient.photo)}" alt="${escapeHtml(patient.name)} photo" />`;
+  }
+
+  const initial = escapeHtml(
+    String(patient.name || "?").trim().charAt(0).toUpperCase() || "?",
+  );
+  return `<div class="patient-photo-placeholder" aria-label="No patient photo available">${initial}</div>`;
+}
+
+function createPatientCard(patient, patientKey) {
+  return `
+    <div class="card" id="${escapeHtml(patientKey)}">
+      <div class="card-details">
+        ${getPatientPhotoMarkup(patient)}
+        <p class="text-title">${escapeHtml(patient.name || "Unnamed patient")}</p>
+        <p class="text-body">Age: ${escapeHtml(patient.age || "-")}</p>
+        <p class="text-body">Details: ${escapeHtml(patient.details || "-")}</p>
+      </div>
+      <button class="card-button" data-patient-key="${escapeHtml(patientKey)}">Delete Patient</button>
+    </div>
+  `;
+}
+
 function attachDeleteEventListeners() {
   const deleteButtons = document.querySelectorAll(".card-button");
 
@@ -393,27 +427,26 @@ onValue(dbRef, (snapshot) => {
   stats.patients = 0;
 
   if (snapshot.exists()) {
+    const patientCards = [];
+
     snapshot.forEach((childSnapshot) => {
-      const patient = childSnapshot.val();
+      const patient = childSnapshot.val() || {};
       const patientKey = childSnapshot.key;
 
-      if (patient.name && patient.age && patient.photo) {
-        stats.patients += 1;
-        const cardHTML = `
-          <div class="card" id="${patientKey}">
-            <div class="card-details">
-              <img src="${patient.photo}" alt="Patient Photo" />
-              <p class="text-title">${patient.name}</p>
-              <p class="text-body">Age: ${patient.age}</p>
-              <p class="text-body">Details: ${patient.details || "-"}</p>
-            </div>
-            <button class="card-button" data-patient-key="${patientKey}">Delete Patient</button>
-          </div>
-        `;
-        cardsContainer.innerHTML += cardHTML;
+      if (!patient.name) {
+        return;
       }
+
+      stats.patients += 1;
+      patientCards.push(createPatientCard(patient, patientKey));
     });
-    attachDeleteEventListeners();
+
+    if (patientCards.length) {
+      cardsContainer.innerHTML = patientCards.join("");
+      attachDeleteEventListeners();
+    } else {
+      cardsContainer.innerHTML = "<p>No patients found.</p>";
+    }
   } else {
     cardsContainer.innerHTML = "<p>No patients found.</p>";
   }
